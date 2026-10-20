@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Snapshot",
+    name: "EZSnap",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "Snapshot",
-            path: "Sources/Snapshot",
+            name: "EZSnap",
+            path: "Sources/EZSnap",
             linkerSettings: [
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("Carbon"),

@@ -1,25 +1,29 @@
-# Snapshot
+# EZSnap
 
 截图并标注的 macOS 菜单栏小工具。Swift + AppKit，不依赖第三方库。
 
 要求：macOS 14 及以上；只需 Command Line Tools，不需要 Xcode。
 
-## 构建与运行
+## 安装与运行
 
 ```bash
-./scripts/build.sh          # 生成 build/Snapshot.app
-open build/Snapshot.app
+./scripts/install.sh        # 打包并装到 ~/Applications/EZSnap.app
 ```
 
-首次运行需要授予屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统录音 → 打开 Snapshot，
-然后退出 Snapshot（菜单栏剪刀图标 → 退出）再重新打开。
+之后在 Finder 的“应用程序”（用户目录下）、启动台或 Spotlight 里找到 EZSnap，双击打开。
+它没有窗口和 Dock 图标，只在屏幕右上角菜单栏放一个剪刀图标；第一次打开和运行中再次双击时会弹出提示。
 
-长期使用可以把 `build/Snapshot.app` 拖进“应用程序”，再在“系统设置 → 通用 → 登录项”里添加。
+只想打包不安装：`./scripts/build.sh` 生成 `build/EZSnap.app`。图标由 `swift scripts/make-icon.swift Resources/AppIcon.icns` 生成。
+
+首次运行需要授予屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统录音 → 打开 EZSnap，
+然后退出 EZSnap（菜单栏剪刀图标 → 退出）再重新打开。
+
+想开机自动运行，在“系统设置 → 通用 → 登录项”里添加 EZSnap。
 
 ### 重新编译后权限失效
 
 默认用 ad-hoc 签名，每次编译签名都会变，系统会认为是新应用，需要重新授权
-（在权限列表里先删掉旧的 Snapshot 再加）。想避免这一点，在“钥匙串访问 → 证书助理 → 创建证书”
+（在权限列表里先删掉旧的 EZSnap 再加）。想避免这一点，在“钥匙串访问 → 证书助理 → 创建证书”
 建一个“代码签名”类型的自签名证书，然后：
 
 ```bash
@@ -64,7 +68,7 @@ SIGN_IDENTITY="证书名称" ./scripts/build.sh
 不需要屏幕录制权限，用合成图片渲染遮罩界面和导出结果，输出 PNG 供查看：
 
 ```bash
-build/Snapshot.app/Contents/MacOS/Snapshot --selftest /tmp
+build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp
 ```
 
 只覆盖绘制和导出，不覆盖截屏、快捷键和鼠标键盘交互。

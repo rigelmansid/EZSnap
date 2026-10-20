@@ -50,9 +50,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DistributedNotificationCenter.default().addObserver(
             self, selector: #selector(inputSourceChanged),
             name: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String), object: nil)
+        // 菜单栏应用没有窗口和 Dock 图标，第一次打开时说一声它在哪（D-9）。
+        if !UserDefaults.standard.bool(forKey: "didShowWelcome") {
+            UserDefaults.standard.set(true, forKey: "didShowWelcome")
+            showWelcome()
+        }
         if !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
         }
+    }
+
+    /// 已经在运行时又双击了图标：再提示一次，免得以为没反应。
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWelcome()
+        return false
+    }
+
+    private func showWelcome() {
+        showAlert(title: "EZSnap 在菜单栏里运行",
+                  message: "点屏幕右上角的剪刀图标打开菜单；按 \(currentShortcut.title) 开始截图。")
     }
 
     // MARK: - 菜单
@@ -118,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return item
         }
         let main = NSMenu()
-        main.addItem(submenu("Snapshot", []))
+        main.addItem(submenu("EZSnap", []))
         main.addItem(submenu("文件", [
             NSMenuItem(title: "保存…", action: #selector(NSDocument.save(_:)), keyEquivalent: "s"), // 即 saveDocument:
         ]))
@@ -229,7 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showPermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "需要屏幕录制权限"
-        alert.informativeText = "请在“系统设置 → 隐私与安全性 → 屏幕与系统录音”中打开 Snapshot，然后退出并重新打开 Snapshot。"
+        alert.informativeText = "请在“系统设置 → 隐私与安全性 → 屏幕与系统录音”中打开 EZSnap，然后退出并重新打开 EZSnap。"
         alert.addButton(withTitle: "打开系统设置")
         alert.addButton(withTitle: "取消")
         NSApp.activate()
