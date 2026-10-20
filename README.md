@@ -4,6 +4,8 @@
 
 要求：macOS 14 及以上；只需 Command Line Tools，不需要 Xcode。
 
+Windows 10 / 11 版在 [windows/](windows/README.md)，功能和这里对应。
+
 ## 安装与运行
 
 ```bash

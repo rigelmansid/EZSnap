@@ -1,5 +1,6 @@
 // 生成应用图标：蓝色圆角方块上一把白色剪刀（SF Symbols 的 scissors）（D-9）。
 // 用法：swift scripts/make-icon.swift Resources/AppIcon.icns
+//      swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico    （Windows 版，D-11）
 import AppKit
 
 let output = CommandLine.arguments.dropFirst().first ?? "Resources/AppIcon.icns"
@@ -37,6 +38,32 @@ func render(_ pixels: Int) -> Data {
     }
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!
+}
+
+/// Windows 的 .ico：每个尺寸一张 PNG（Windows Vista 以后都认）。
+func writeIco(_ path: String) throws {
+    let sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
+    let images = sizes.map { render($0) }
+    var data = Data()
+    func le16(_ v: Int) { data.append(contentsOf: [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF)]) }
+    func le32(_ v: Int) { le16(v & 0xFFFF); le16((v >> 16) & 0xFFFF) }
+    le16(0); le16(1); le16(sizes.count)
+    var offset = 6 + 16 * sizes.count
+    for (size, png) in zip(sizes, images) {
+        data.append(UInt8(size >= 256 ? 0 : size))
+        data.append(UInt8(size >= 256 ? 0 : size))
+        data.append(0); data.append(0)
+        le16(1); le16(32); le32(png.count); le32(offset)
+        offset += png.count
+    }
+    for png in images { data.append(png) }
+    try data.write(to: URL(fileURLWithPath: path))
+}
+
+if output.hasSuffix(".ico") {
+    try writeIco(output)
+    print("已生成 \(output)")
+    exit(0)
 }
 
 let iconset = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("AppIcon-\(UUID().uuidString).iconset")

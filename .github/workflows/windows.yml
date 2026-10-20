@@ -1,0 +1,41 @@
+# Windows 版：编译、跑自检、打安装包（D-11）。只在 windows/ 或本文件有改动时运行，也可以手动运行。
+name: Windows
+
+on:
+  push:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: dotnet build windows/EZSnap/EZSnap.csproj -c Release
+
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'selftest'
+          $p = Start-Process -FilePath 'windows\EZSnap\bin\Release\net48\EZSnap.exe' -ArgumentList '--selftest', $out -Wait -PassThru
+          Get-Content (Join-Path $out 'selftest.log') -Encoding UTF8
+          if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
+
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc windows\installer\EZSnap.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EZSnap-windows
+          path: |
+            windows/dist/*.exe
+            ${{ runner.temp }}/selftest

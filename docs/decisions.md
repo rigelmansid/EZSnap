@@ -78,10 +78,26 @@
 - 理由：状态只有一份，跨屏时不用在几块屏之间同步和换算；“锁定其他屏”那一套随之去掉，D-2 里由它引起的问题也跟着消失。
 - 影响：坐标统一用 CG 全局坐标（主屏左上角为原点）；OverlayView 不再有自己的选区状态；钉图横跨两屏时系统只显示在一块屏上（“显示器具有单独的空间”默认开着）。
 
-### D-9 改名 EZSnap，做成双击就能用的 app（2026-10-20，用户决定）
+### D-9 改名 EZSnap，做成双击就能用的 app（2026-10-20，用户决定）（“仓库和文件夹名不变”已被 D-10 替代）
 
 - 背景：用户问能不能做成双击运行的 app，并要求改名 ezsnap；原来叫 Snapshot，没有图标，只在 build/ 里，启动后只有菜单栏图标，看起来像没反应。
 - 选项：A 装进 ~/Applications / B 加图标 / C 首次启动提示 / D 打包 dmg；用户选 A、B、C，D 等签名方式定了再做
 - 选择：显示名 EZSnap（大小写由 agent 定），可执行文件、SwiftPM 目标、源码目录（Sources/EZSnap）一起改；bundle id 改为 local.ezsnap.app；scripts/install.sh 装到 ~/Applications；scripts/make-icon.swift 用 SF Symbols 的剪刀生成 Resources/AppIcon.icns；第一次启动和运行中再次双击时提示它在菜单栏。
 - 理由：装到用户目录不用管理员密码；图标用脚本生成，以后改样式能重做；菜单栏应用没有窗口，不提示用户会以为没打开。
 - 影响：bundle id 变了，之前的快捷键选择、保存目录等设置不会带过来，屏幕录制要重新授权，权限列表里旧的 Snapshot 可以删；仓库和项目文件夹名不变（P016_snapshot）。
+
+### D-10 本地文件夹和 GitHub 仓库都改名 EZSnap（2026-10-21，用户决定）
+
+- 背景：D-9 把 app 改名 EZSnap 时，本地文件夹和 GitHub 仓库仍叫 P016_snapshot；用户要求两边统一。
+- 选项：A 本地文件夹和仓库都改为 EZSnap / B 只改其中一边
+- 选择：A：GitHub 仓库用 gh repo rename 改名（旧地址由 GitHub 自动跳转），本地文件夹改为 VBCD/EZSnap，origin 指向新地址。替代 D-9 里“仓库和项目文件夹名不变”。
+- 理由：名字一致，不用记两套。
+- 影响：.build 缓存里有旧的绝对路径，移动后要删掉重新编译；以后在新文件夹里开会话；private-notes.md 里的地址已更新。
+
+### D-11 做 Windows 10 版（2026-10-21，用户决定）
+
+- 背景：用户要一个和 Mac 版功能一样、能在 Windows 10 上安装使用的版本；Mac 版是 Swift + AppKit，不能直接用。
+- 选项：技术 A C# + WinForms / B C# + WPF / C C++ Win32；位置 A 同仓库 windows/ / B 另建仓库；验证 A GitHub Actions 的 Windows 机器 / B 用户的 Windows 电脑
+- 选择：C# + WinForms，放在同仓库 windows/，用 GitHub Actions 的 Windows 机器编译、跑自检、打安装包（用户选）。目标框架用 .NET Framework 4.8（agent 选择）：.NET 10 官方已不支持普通版 Windows 10，4.8 是 Windows 10 自带的，不用另装运行时。
+- 理由：WinForms 的 GDI+ 画法和 AppKit 最接近；这台 Mac 上的 .NET SDK 能编译 net48，但跑不了，只能靠 CI 和用户的电脑验证。
+- 影响：Windows 版坐标统一用虚拟屏幕的物理像素（按每屏 DPI 缩放界面尺寸）；⌘ 换成 Ctrl，菜单栏换成托盘，默认快捷键 Ctrl+Alt+A；安装包不签名，会被 SmartScreen 提示。

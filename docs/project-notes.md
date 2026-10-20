@@ -1,4 +1,4 @@
-# P016_snapshot 项目记录
+# EZSnap 项目记录
 
 决策见 [decisions.md](decisions.md)（D-n），踩过的坑见 [pitfalls.md](pitfalls.md)（坑 n）。
 
@@ -30,3 +30,6 @@ Updated: 2026-10-20 15:58
 - [ ] 敏感词文件 .git/privacy-patterns 还没建（/adopt 第四节）：问用户要拦哪些真实用户名、主机名
 - [ ] 从菜单开始截图靠固定等 0.25 秒让菜单淡出，机器忙时菜单可能被截进去（AppDelegate.captureFromMenu）；暂不改，真遇到再修（D-4）
 - [ ] 小问题：选着文字工具时双击选区不会完成截图；“另存为”对话框开着时按快捷键会在它上面再开一次截图；暂不改（D-4）
+- [ ] 在真实的 Windows 10 上验证 Windows 版（D-11）：安装、托盘图标和提示、Ctrl+Alt+A 截图、悬停识别窗口、跨屏选区、六种标注和文字输入（含中文输入法）、Ctrl+C/Ctrl+S/Ctrl+Z、钉图、自定义快捷键、卸载；多块屏 DPI 不同时界面大小是否正常
+- [ ] Windows 安装程序界面是英文的：要中文得自带 ChineseSimplified.isl（Inno Setup 官方没有）
+- [ ] Windows 版代码签名：没签名会被 SmartScreen 拦，和 Mac 的签名方式一起定

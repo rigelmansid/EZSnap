@@ -2,3 +2,6 @@
 build/
 .DS_Store
 private-notes.md
+windows/*/bin/
+windows/*/obj/
+windows/dist/
