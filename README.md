@@ -30,7 +30,7 @@ SIGN_IDENTITY="证书名称" ./scripts/build.sh
 
 | 操作 | 说明 |
 |---|---|
-| `⌃⌘A` | 开始截图（菜单栏 → 快捷键 可改成 `⌥A` 或 `⇧⌘A`） |
+| `⌃⌘A` | 开始截图（菜单栏 → 快捷键：可改成 `⌥A`、`⇧⌘A`，或选“自定义…”录制任意组合键） |
 | 鼠标悬停 | 自动识别窗口，单击选中该窗口；没有窗口时选中整个屏幕 |
 | 拖动 | 框选区域 |
 | 拖选区内部 / 边角 | 移动 / 调整大小（有标注后不能移动，仍可调整大小） |
@@ -49,7 +49,8 @@ SIGN_IDENTITY="证书名称" ./scripts/build.sh
 | 文件 | 内容 |
 |---|---|
 | `AppDelegate.swift` | 菜单栏图标、快捷键选择、不显示的主菜单（分发 ⌘ 快捷键）、截图流程、钉图管理 |
-| `HotKey.swift` | 全局快捷键（Carbon `RegisterEventHotKey`，不需要辅助功能权限） |
+| `HotKey.swift` | 全局快捷键（Carbon `RegisterEventHotKey`，不需要辅助功能权限）、快捷键模型、键位和字符的换算 |
+| `HotKeyRecorder.swift` | 录制自定义快捷键的小窗口 |
 | `Capture.swift` | ScreenCaptureKit 截屏、窗口列表、复制和保存 |
 | `CaptureSession.swift` | 一次截图：每块屏幕一个遮罩窗口 |
 | `OverlayView.swift` | 选区、标注、放大镜、导出 |
@@ -72,5 +73,4 @@ build/Snapshot.app/Contents/MacOS/Snapshot --selftest /tmp
 
 - 长截图、OCR、截图录屏
 - 跨屏选区（选区只能在一块屏幕内）
-- 自定义任意快捷键（目前只能从 3 个预设里选）
 - 开机自启需要手动在系统设置里加

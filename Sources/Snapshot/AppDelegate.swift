@@ -1,33 +1,42 @@
 import AppKit
 import Carbon
 
-struct HotKeyOption {
-    let title: String
-    let keyCode: UInt32
-    let carbonModifiers: UInt32
-    let menuModifiers: NSEvent.ModifierFlags
-}
-
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    static let hotKeyOptions = [
-        HotKeyOption(title: "⌃⌘A", keyCode: UInt32(kVK_ANSI_A), carbonModifiers: UInt32(controlKey | cmdKey),
-                     menuModifiers: [.control, .command]),
-        HotKeyOption(title: "⌥A", keyCode: UInt32(kVK_ANSI_A), carbonModifiers: UInt32(optionKey),
-                     menuModifiers: [.option]),
-        HotKeyOption(title: "⇧⌘A", keyCode: UInt32(kVK_ANSI_A), carbonModifiers: UInt32(shiftKey | cmdKey),
-                     menuModifiers: [.shift, .command]),
-    ]
-
     private var statusItem: NSStatusItem!
     private let hotKey = HotKey()
     private var hotKeyRegistered = true
+    private var recorder: HotKeyRecorder?
     private var session: CaptureSession?
     private var isCapturing = false
     private var pins: [PinWindow] = []
 
+    /// 选中的预设序号；-1 表示用自定义快捷键（D-6）。
     private var hotKeyIndex: Int {
-        get { min(max(UserDefaults.standard.integer(forKey: "hotKeyIndex"), 0), Self.hotKeyOptions.count - 1) }
+        get {
+            let i = UserDefaults.standard.integer(forKey: "hotKeyIndex")
+            return i == -1 && customShortcut != nil ? -1 : min(max(i, 0), Shortcut.presets.count - 1)
+        }
         set { UserDefaults.standard.set(newValue, forKey: "hotKeyIndex") }
+    }
+
+    private var customShortcut: Shortcut? {
+        get {
+            guard let d = UserDefaults.standard.dictionary(forKey: "customHotKey"),
+                  let keyCode = d["keyCode"] as? Int, let modifiers = d["modifiers"] as? Int else { return nil }
+            return Shortcut(keyCode: UInt32(keyCode), modifiers: NSEvent.ModifierFlags(rawValue: UInt(modifiers)))
+        }
+        set {
+            if let s = newValue {
+                UserDefaults.standard.set(["keyCode": Int(s.keyCode), "modifiers": Int(s.modifiers.rawValue)],
+                                          forKey: "customHotKey")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "customHotKey")
+            }
+        }
+    }
+
+    private var currentShortcut: Shortcut {
+        hotKeyIndex < 0 ? customShortcut ?? Shortcut.presets[0] : Shortcut.presets[hotKeyIndex]
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -38,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.image = icon
         HotKey.onPress = { [weak self] in self?.startCapture() }
         applyHotKey()
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(inputSourceChanged),
+            name: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String), object: nil)
         if !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
         }
@@ -46,28 +58,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 菜单
 
     private func applyHotKey() {
-        let option = Self.hotKeyOptions[hotKeyIndex]
-        hotKeyRegistered = hotKey.register(keyCode: option.keyCode, modifiers: option.carbonModifiers)
+        let shortcut = currentShortcut
+        hotKeyRegistered = hotKey.register(keyCode: shortcut.keyCode, modifiers: shortcut.carbonModifiers)
         rebuildMenu()
     }
 
     private func rebuildMenu() {
         let menu = NSMenu()
-        let option = Self.hotKeyOptions[hotKeyIndex]
+        let shortcut = currentShortcut
 
-        let capture = NSMenuItem(title: "截图", action: #selector(captureFromMenu), keyEquivalent: "a")
-        capture.keyEquivalentModifierMask = option.menuModifiers
+        let capture = NSMenuItem(title: "截图", action: #selector(captureFromMenu),
+                                 keyEquivalent: shortcut.menuKeyEquivalent ?? "")
+        if shortcut.menuKeyEquivalent == nil { capture.title = "截图（\(shortcut.title)）" }
+        capture.keyEquivalentModifierMask = shortcut.modifiers
         capture.target = self
         menu.addItem(capture)
 
         let hotKeyMenu = NSMenu()
-        for (i, o) in Self.hotKeyOptions.enumerated() {
-            let item = NSMenuItem(title: o.title, action: #selector(chooseHotKey(_:)), keyEquivalent: "")
+        for (i, preset) in Shortcut.presets.enumerated() {
+            let item = NSMenuItem(title: preset.title, action: #selector(chooseHotKey(_:)), keyEquivalent: "")
             item.tag = i
             item.target = self
             item.state = i == hotKeyIndex ? .on : .off
             hotKeyMenu.addItem(item)
         }
+        hotKeyMenu.addItem(.separator())
+        let custom = NSMenuItem(title: hotKeyIndex < 0 ? "自定义：\(shortcut.title)…" : "自定义…",
+                                action: #selector(recordHotKey), keyEquivalent: "")
+        custom.target = self
+        custom.state = hotKeyIndex < 0 ? .on : .off
+        hotKeyMenu.addItem(custom)
         let hotKeyItem = NSMenuItem(title: hotKeyRegistered ? "快捷键" : "快捷键（注册失败，可能被占用）",
                                     action: nil, keyEquivalent: "")
         hotKeyItem.submenu = hotKeyMenu
@@ -116,7 +136,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func chooseHotKey(_ sender: NSMenuItem) {
         hotKeyIndex = sender.tag
+        customShortcut = nil
         applyHotKey()
+    }
+
+    @objc private func recordHotKey() {
+        guard recorder == nil else { return }
+        // 录制期间停用全局快捷键，免得按到现在的组合键就开始截图。
+        hotKey.unregister()
+        recorder = HotKeyRecorder(current: currentShortcut) { [weak self] shortcut in
+            guard let self else { return }
+            self.recorder = nil
+            guard let shortcut else { return self.applyHotKey() }
+            let oldIndex = self.hotKeyIndex, oldCustom = self.customShortcut
+            self.customShortcut = shortcut
+            self.hotKeyIndex = -1
+            self.applyHotKey()
+            if !self.hotKeyRegistered {
+                self.customShortcut = oldCustom
+                self.hotKeyIndex = oldIndex
+                self.applyHotKey()
+                self.showAlert(title: "快捷键设置失败",
+                               message: "\(shortcut.title) 注册失败，可能被其他程序占用了。仍使用 \(self.currentShortcut.title)。")
+            }
+        }
+        recorder?.show()
+    }
+
+    @objc private func inputSourceChanged() {
+        // 预设按字符定义，换了键盘布局键位可能跟着变（D-6）；录制期间不重新注册。
+        if recorder == nil { applyHotKey() }
     }
 
     @objc private func closeAllPins() {

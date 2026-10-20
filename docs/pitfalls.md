@@ -26,3 +26,10 @@
 - 原因：测试进程没激活、没有 key 窗口，经 NSApp.sendEvent 送的普通按键没有到达第一响应者（带 ⌘ 的经主菜单可以）；视图对 CaptureSession 是弱引用，测试没持有会话，创建后马上被释放。
 - 修法：测试里覆写 NSApplication.keyWindow；带 ⌘ 的键走 NSApp.sendEvent，普通按键直接交给窗口的 sendEvent；用数组持有会话。
 - 启示：测试要照真实的持有关系来（应用里由 AppDelegate 持有会话）；离屏测试只能验证到分发目标，“点击让窗口成为 key”这类系统行为还得在真机上试。
+
+### 坑 3 快捷键录制框收不到带 ⌘ 的组合键（2026-10-20，已解决 2026-10-20）
+
+- 现象：离屏测试里，录制框重写了 performKeyEquivalent，发给录制窗口的 ⌘C 还是没到录制框，被主菜单的“拷贝”吞掉（坑 1）。
+- 原因：没完全查清：可能 AppKit 先查主菜单再查窗口里的视图，也可能是测试里伪造的 key 窗口没被问到。另外，测试里用 postEvent 放进队列的事件，nextEvent 取不出来。
+- 修法：录制期间装本地事件监视器（NSEvent.addLocalMonitorForEvents），它在 NSApp.sendEvent 里先于主菜单拿到按键，不依赖分发顺序；测试直接调用 NSApp.sendEvent。
+- 启示：要在主菜单之前截下带 ⌘ 的组合键，用本地事件监视器，不要依赖视图的 performKeyEquivalent。
