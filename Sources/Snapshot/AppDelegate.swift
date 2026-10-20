@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = Self.makeMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let icon = NSImage(systemSymbolName: "scissors", accessibilityDescription: "截图")
         icon?.isTemplate = true
@@ -83,6 +84,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         statusItem.menu = menu
+    }
+
+    /// 不显示的主菜单，带 ⌘ 的快捷键都靠它分发（D-1）：文字框里的剪切、拷贝、粘贴、全选、撤销，
+    /// 以及遮罩和钉图的 ⌘C、⌘S、⌘Z（OverlayView、PinView 里的同名方法）。
+    /// 新加 ⌘ 快捷键要在这里加菜单项，不能写在 keyDown 里（坑 1）。
+    static func makeMainMenu() -> NSMenu {
+        func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
+            let menu = NSMenu(title: title)
+            for item in items { menu.addItem(item) }
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.submenu = menu
+            return item
+        }
+        let main = NSMenu()
+        main.addItem(submenu("Snapshot", []))
+        main.addItem(submenu("文件", [
+            NSMenuItem(title: "保存…", action: #selector(NSDocument.save(_:)), keyEquivalent: "s"), // 即 saveDocument:
+        ]))
+        main.addItem(submenu("编辑", [
+            NSMenuItem(title: "撤销", action: Selector(("undo:")), keyEquivalent: "z"),
+            NSMenuItem(title: "重做", action: Selector(("redo:")), keyEquivalent: "Z"),
+            .separator(),
+            NSMenuItem(title: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
+            NSMenuItem(title: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
+            NSMenuItem(title: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
+            NSMenuItem(title: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
+        ]))
+        return main
     }
 
     @objc private func chooseHotKey(_ sender: NSMenuItem) {
@@ -156,6 +185,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "取消")
         NSApp.activate()
         if alert.runModal() == .alertFirstButtonReturn { openPermissionSettings() }
+        // 提示框开着时按下的快捷键会排到它关掉以后才处理，这些按键不能再弹一次。
+        HotKey.ignoreBefore = GetCurrentEventTime()
     }
 
     private func showAlert(title: String, message: String) {

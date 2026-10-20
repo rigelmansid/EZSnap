@@ -10,6 +10,10 @@ enum CaptureResult {
 /// 一次截图：每块屏幕一个全屏遮罩窗口，同一时间只有一块屏幕能有选区。
 final class CaptureSession {
     var onFinish: ((CaptureResult) -> Void)?
+    /// 放大镜里的颜色格式，各块屏幕共用，按 Shift 切换。
+    var showHex = false {
+        didSet { views.forEach { $0.needsDisplay = true } }
+    }
     private(set) weak var activeView: OverlayView?
     private var windows: [OverlayWindow] = []
     private var views: [OverlayView] = []
@@ -25,6 +29,7 @@ final class CaptureSession {
             let view = OverlayView(frame: frame, image: shot.image, windowRects: rects)
             view.autoresizingMask = [.width, .height]
             view.session = self
+            window.overlay = view
             container.addSubview(view)
             window.contentView = container
             windows.append(window)
@@ -39,7 +44,8 @@ final class CaptureSession {
             view.updateMouse(screenPoint: mouse)
         }
         NSApp.activate()
-        let index = windows.firstIndex { $0.frame.contains(mouse) } ?? 0
+        // 鼠标顶在屏幕最上沿时 y 正好等于 maxY：NSMouseInRect 算在里面，frame.contains 不算。
+        let index = windows.firstIndex { NSMouseInRect(mouse, $0.frame, false) } ?? 0
         windows[index].makeKeyAndOrderFront(nil)
         windows[index].makeFirstResponder(views[index])
         NSCursor.crosshair.set()
@@ -70,6 +76,8 @@ final class CaptureSession {
 }
 
 final class OverlayWindow: NSWindow {
+    weak var overlay: OverlayView?
+
     init(screen: NSScreen) {
         super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         level = .screenSaver
@@ -83,7 +91,8 @@ final class OverlayWindow: NSWindow {
         setFrame(screen.frame, display: false)
     }
 
-    override var canBecomeKey: Bool { true }
+    // 被锁定的屏幕不能成为 key 窗口，免得在上面点一下就把正在输入的文字和 Esc 带走。
+    override var canBecomeKey: Bool { !(overlay?.locked ?? false) }
     override var canBecomeMain: Bool { true }
 }
 

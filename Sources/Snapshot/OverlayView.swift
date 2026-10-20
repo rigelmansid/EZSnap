@@ -2,12 +2,18 @@ import AppKit
 
 /// 一块屏幕上的截图遮罩：选窗口或拖选区、调整选区、标注、放大镜。
 /// 坐标系是翻转的（左上角原点，单位为点），和 CG 全局坐标方向一致。
-final class OverlayView: NSView, NSTextFieldDelegate {
+final class OverlayView: NSView, NSTextFieldDelegate, NSMenuItemValidation {
     weak var session: CaptureSession?
     /// 另一块屏幕已经有选区时，这块屏幕只显示遮罩，不响应鼠标。
     var locked = false {
         didSet {
-            if locked { hoverRect = nil }
+            if locked {
+                hoverRect = nil
+            } else if phase == .choosing, let mouse {
+                // 解锁后马上恢复窗口高亮和光标，不等鼠标再动。
+                hoverRect = windowRect(at: mouse)
+                updateCursor(at: mouse)
+            }
             needsDisplay = true
         }
     }
@@ -33,11 +39,9 @@ final class OverlayView: NSView, NSTextFieldDelegate {
     private var selection = CGRect.zero
     private var hoverRect: CGRect?
     private var tool: Tool?
-    private var annotations: [Annotation] = []
+    private var annotations: [Annotation] = [] { didSet { updateUndoButton() } }
     private var current: Annotation?
-    private var textField: NSTextField?
-    private var showHex = false
-    private var shiftDown = false
+    private var textField: NSTextField? { didSet { updateUndoButton() } }
     private let toolbar = ToolbarView()
     private let style = AnnotationStyle.shared
 
@@ -91,6 +95,11 @@ final class OverlayView: NSView, NSTextFieldDelegate {
 
     override func mouseMoved(with event: NSEvent) {
         let p = location(event)
+        // key 窗口在鼠标移到别的屏幕后可能还会收到移动事件，这时按移出处理。
+        guard bounds.contains(p) else {
+            mouseExited(with: event)
+            return
+        }
         mouse = p
         updateCursor(at: p)
         guard phase != .selected else { return }
@@ -164,12 +173,12 @@ final class OverlayView: NSView, NSTextFieldDelegate {
     override func mouseUp(with event: NSEvent) {
         guard !locked else { return }
         switch drag {
-        case .creating:
+        case .creating(let start):
             if phase == .dragging {
                 if selection.width >= 4, selection.height >= 4 { select() } else { reset() }
             } else {
-                // 没有拖动：选中鼠标下的窗口，没有窗口就选整个屏幕。
-                selection = hoverRect ?? bounds
+                // 没有拖动：选中按下处的窗口，没有窗口就选整个屏幕。
+                selection = windowRect(at: start)
                 select()
             }
         case .drawing:
@@ -183,7 +192,6 @@ final class OverlayView: NSView, NSTextFieldDelegate {
             break
         }
         drag = .none
-        toolbar.canUndo = !annotations.isEmpty
         layoutToolbar()
         updateCursor(at: clamp(location(event)))
         needsDisplay = true
@@ -212,15 +220,15 @@ final class OverlayView: NSView, NSTextFieldDelegate {
 
     func handleKey(_ event: NSEvent) {
         let cmd = event.modifierFlags.contains(.command)
-        let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        // 按 ⌘ 键位表取字符：俄文等非拉丁布局下也能认出 C 键，和菜单快捷键的认法一致。
+        let key = event.characters(byApplyingModifiers: .command)?.lowercased() ?? ""
         if event.keyCode == 53 { // Esc
             session?.finish(.cancelled)
             return
         }
+        // ⌘C、⌘S、⌘Z 由主菜单分发，见下面的菜单命令。
         if phase == .selected {
-            if event.keyCode == 36 || event.keyCode == 76 || (cmd && key == "c") { finish(.copy) }
-            else if cmd && key == "s" { finish(.save) }
-            else if cmd && key == "z" { undo() }
+            if event.keyCode == 36 || event.keyCode == 76 { finish(.copy) }
         } else if !cmd, key == "c", let mouse, let color = pixelColor(at: mouse) {
             let pb = NSPasteboard.general
             pb.clearContents()
@@ -230,12 +238,9 @@ final class OverlayView: NSView, NSTextFieldDelegate {
     }
 
     func handleFlags(_ event: NSEvent) {
-        let shift = event.modifierFlags.contains(.shift)
-        if shift && !shiftDown {
-            showHex.toggle()
-            needsDisplay = true
-        }
-        shiftDown = shift
+        // 只认 Shift 键本身按下（56 左、60 右）：先松开 ⌘ 等别的键时，flags 里也可能还带着 Shift。
+        guard event.keyCode == 56 || event.keyCode == 60, event.modifierFlags.contains(.shift) else { return }
+        session?.showHex.toggle()
     }
 
     // MARK: - 状态
@@ -257,7 +262,6 @@ final class OverlayView: NSView, NSTextFieldDelegate {
         current = nil
         tool = nil
         toolbar.selectedTool = nil
-        toolbar.canUndo = false
         hoverRect = mouse.map(windowRect(at:))
         session?.didResetSelection(in: self)
         layoutToolbar()
@@ -272,6 +276,11 @@ final class OverlayView: NSView, NSTextFieldDelegate {
         layoutToolbar()
     }
 
+    /// 有标注或正在输入文字时可以撤销；撤销正在输入的文字框会把它整个去掉。
+    private func updateUndoButton() {
+        toolbar.canUndo = textField != nil || !annotations.isEmpty
+    }
+
     private func undo() {
         if let field = textField {
             field.removeFromSuperview()
@@ -280,7 +289,8 @@ final class OverlayView: NSView, NSTextFieldDelegate {
         } else if !annotations.isEmpty {
             annotations.removeLast()
         }
-        toolbar.canUndo = !annotations.isEmpty
+        // 撤销完可能又能拖动选区了，光标马上跟着变，不等鼠标再动。
+        if let mouse { updateCursor(at: mouse) }
         needsDisplay = true
     }
 
@@ -297,8 +307,38 @@ final class OverlayView: NSView, NSTextFieldDelegate {
         case .save:
             session?.finish(.save(shot))
         case .pin:
-            let rectInWindow = convert(selection, to: nil)
+            // 钉图窗口按导出图实际的像素范围摆放，和图片一样大，不会被拉伸。
+            let px = pixelRect(selection)
+            let rect = CGRect(x: px.minX / scale, y: px.minY / scale, width: shot.pointSize.width, height: shot.pointSize.height)
+            let rectInWindow = convert(rect, to: nil)
             session?.finish(.pin(shot, window?.convertToScreen(rectInWindow) ?? rectInWindow))
+        }
+    }
+
+    // MARK: - 菜单命令（⌘C、⌘S、⌘Z，见 AppDelegate.makeMainMenu）
+
+    @objc func copy(_ sender: Any?) { finish(.copy) }
+
+    @objc func saveDocument(_ sender: Any?) { finish(.save) }
+
+    @objc func undo(_ sender: Any?) {
+        // 正在输入时撤销输入的文字。字段编辑器不处理 undo:，会沿响应链传到这里。
+        if let editor = textField?.currentEditor() {
+            editor.undoManager?.undo()
+        } else {
+            undo()
+        }
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(copy(_:)), #selector(saveDocument(_:)):
+            return phase == .selected
+        case #selector(undo(_:)):
+            if let editor = textField?.currentEditor() { return editor.undoManager?.canUndo ?? false }
+            return !annotations.isEmpty
+        default:
+            return true
         }
     }
 
@@ -359,7 +399,6 @@ final class OverlayView: NSView, NSTextFieldDelegate {
             annotations.append(Annotation(tool: .text, color: field.textColor ?? style.color, width: 0,
                                           points: [origin], text: text, fontSize: field.font?.pointSize ?? style.fontSize))
         }
-        toolbar.canUndo = !annotations.isEmpty
         window?.makeFirstResponder(self)
         needsDisplay = true
     }
@@ -394,7 +433,7 @@ final class OverlayView: NSView, NSTextFieldDelegate {
         case .choosing, .dragging:
             NSCursor.crosshair.set()
         case .selected:
-            if !toolbar.isHidden, toolbar.frame.contains(p) {
+            if toolbar.hitTest(p) != nil {
                 NSCursor.arrow.set()
             } else if let h = handle(at: p) {
                 h.cursor.set()
@@ -482,7 +521,8 @@ final class OverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func drawSizeLabel(for r: CGRect) {
-        let text = "\(Int((r.width * scale).rounded())) × \(Int((r.height * scale).rounded()))" as NSString
+        let px = pixelRect(r)
+        let text = "\(Int(px.width)) × \(Int(px.height))" as NSString
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular),
             .foregroundColor: NSColor.white,
@@ -569,15 +609,20 @@ final class OverlayView: NSView, NSTextFieldDelegate {
     }
 
     private func colorText(_ c: (r: UInt8, g: UInt8, b: UInt8)) -> String {
-        showHex ? String(format: "#%02X%02X%02X", c.r, c.g, c.b) : "RGB(\(c.r),\(c.g),\(c.b))"
+        session?.showHex == true ? String(format: "#%02X%02X%02X", c.r, c.g, c.b) : "RGB(\(c.r),\(c.g),\(c.b))"
+    }
+
+    /// 选区对应的原生像素范围。四条边各自取整，导出的图和屏幕上看到的选区边界一致。
+    private func pixelRect(_ r: CGRect) -> CGRect {
+        let x0 = (r.minX * scale).rounded(), x1 = (r.maxX * scale).rounded()
+        let y0 = (r.minY * scale).rounded(), y1 = (r.maxY * scale).rounded()
+        return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 
     /// 按原生像素裁出选区并画上标注。
     func renderSelection() -> CapturedImage? {
         let imageRect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-        let px = CGRect(x: (selection.minX * scale).rounded(), y: (selection.minY * scale).rounded(),
-                        width: (selection.width * scale).rounded(), height: (selection.height * scale).rounded())
-            .intersection(imageRect)
+        let px = pixelRect(selection).intersection(imageRect)
         guard !px.isNull, !px.isEmpty, let base = image.cropping(to: px) else { return nil }
         let w = Int(px.width), h = Int(px.height)
         let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -625,7 +670,6 @@ final class OverlayView: NSView, NSTextFieldDelegate {
         self.tool = tool
         self.annotations = annotations
         toolbar.selectedTool = tool
-        toolbar.canUndo = !annotations.isEmpty
         layoutToolbar()
     }
 }

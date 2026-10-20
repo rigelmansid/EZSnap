@@ -87,10 +87,11 @@ final class ToolbarView: NSView {
         panel.frame = CGRect(x: 0, y: Self.rowHeight + Self.gap, width: panel.preferredWidth, height: Self.panelHeight)
     }
 
-    // 吞掉工具条空白处的点击，免得传给下面的遮罩。
-    override func mouseDown(with event: NSEvent) {}
-    override func rightMouseDown(with event: NSEvent) {}
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    // 工具条本身透明（两行之间、第二行右边），点击交给下面的遮罩；条和面板上的空白处由 RoundedPanel 吞掉。
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let view = super.hitTest(point)
+        return view === self ? nil : view
+    }
 }
 
 class RoundedPanel: NSView {

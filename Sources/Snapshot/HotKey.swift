@@ -3,6 +3,8 @@ import Carbon
 /// 全局快捷键。用 Carbon 的 RegisterEventHotKey，不需要辅助功能权限。
 final class HotKey {
     static var onPress: (() -> Void)?
+    /// 早于这个时刻（GetCurrentEventTime 的时间）按下的快捷键不处理。
+    static var ignoreBefore: EventTime = 0
     private static var handlerInstalled = false
     private var ref: EventHotKeyRef?
 
@@ -11,8 +13,11 @@ final class HotKey {
         unregister()
         if !HotKey.handlerInstalled {
             var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-            InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-                DispatchQueue.main.async { HotKey.onPress?() }
+            InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+                let time = GetEventTime(event)
+                DispatchQueue.main.async {
+                    if time >= HotKey.ignoreBefore { HotKey.onPress?() }
+                }
                 return noErr
             }, 1, &spec, nil, nil)
             HotKey.handlerInstalled = true

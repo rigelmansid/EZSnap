@@ -78,14 +78,13 @@ private final class PinView: NSView {
                      display: true)
     }
 
+    // ⌘C、⌘S 由主菜单分发到 copy(_:) 和 saveDocument(_:)，见 AppDelegate.makeMainMenu。
     override func keyDown(with event: NSEvent) {
-        let cmd = event.modifierFlags.contains(.command)
-        let key = event.charactersIgnoringModifiers?.lowercased()
-        if event.keyCode == 53 { pin?.close() }
-        else if cmd && key == "c" { copyImage() }
-        else if cmd && key == "s" { saveImage() }
-        else { super.keyDown(with: event) }
+        if event.keyCode == 53 { pin?.close() } else { super.keyDown(with: event) }
     }
+
+    @objc func copy(_ sender: Any?) { copyImage() }
+    @objc func saveDocument(_ sender: Any?) { saveImage() }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()

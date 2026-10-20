@@ -39,6 +39,7 @@ struct CapturedImage {
         panel.canCreateDirectories = true
         panel.level = .modalPanel
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX") // 固定格式，不跟着系统日历（如农历）和数字形式变
         formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
         panel.nameFieldStringValue = "截图 \(formatter.string(from: Date())).png"
         let defaults = UserDefaults.standard

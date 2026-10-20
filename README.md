@@ -40,6 +40,7 @@ SIGN_IDENTITY="证书名称" ./scripts/build.sh
 | `⌘S` / 保存按钮 | 另存为 PNG |
 | 钉图按钮 | 把截图钉在屏幕最上层：拖动移动，滚轮缩放，双击或 `Esc` 关闭，右键菜单可复制、另存 |
 | `⌘Z` | 撤销上一个标注 |
+| 文字框里 | `⌘X`、`⌘C`、`⌘V`、`⌘A`、`⌘Z` 是普通的文字编辑；`⌘S` 直接保存；`Enter` 或 `Esc` 结束输入 |
 | 右键 | 有选区时取消选区，没有选区时退出 |
 | `Esc` | 退出截图 |
 
@@ -47,7 +48,7 @@ SIGN_IDENTITY="证书名称" ./scripts/build.sh
 
 | 文件 | 内容 |
 |---|---|
-| `AppDelegate.swift` | 菜单栏图标、快捷键选择、截图流程、钉图管理 |
+| `AppDelegate.swift` | 菜单栏图标、快捷键选择、不显示的主菜单（分发 ⌘ 快捷键）、截图流程、钉图管理 |
 | `HotKey.swift` | 全局快捷键（Carbon `RegisterEventHotKey`，不需要辅助功能权限） |
 | `Capture.swift` | ScreenCaptureKit 截屏、窗口列表、复制和保存 |
 | `CaptureSession.swift` | 一次截图：每块屏幕一个遮罩窗口 |
