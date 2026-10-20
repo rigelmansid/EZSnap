@@ -91,7 +91,8 @@ namespace EZSnap
             Check("导出尺寸和选区一致：480×280", export != null && export.Image.Width == 480 && export.Image.Height == 280,
                 export == null ? "null" : export.Image.Size.ToString());
             if (export != null) Save(export.Image, Path.Combine(dir, "3-export.png"));
-            Check("小数坐标的选区按四条边取整", CaptureSession.PixelRect(new RectangleF(10.3f, 10.3f, 10.3f, 10.3f)).Width == 10,
+            // 10.3→10、20.6→21，宽 11；按“起点、宽度分别取整”会得到 10。
+            Check("小数坐标的选区按四条边取整", CaptureSession.PixelRect(new RectangleF(10.3f, 10.3f, 10.3f, 10.3f)).Width == 11,
                 CaptureSession.PixelRect(new RectangleF(10.3f, 10.3f, 10.3f, 10.3f)).ToString());
         }
 
