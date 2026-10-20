@@ -1,6 +1,6 @@
 import AppKit
 
-/// 渲染自检：用合成图片驱动 OverlayView，把界面和导出结果写成 PNG 供人工查看。
+/// 渲染自检：用合成图片驱动截图会话和遮罩视图（不建窗口），把界面和导出结果写成 PNG 供人工查看。
 /// 不截屏、不需要屏幕录制权限，也不覆盖鼠标键盘交互。
 enum SelfTest {
     static func run(outputDir: String) {
@@ -10,12 +10,12 @@ enum SelfTest {
             print("自检失败：无法生成样例图")
             exit(1)
         }
-        let frame = CGRect(origin: .zero, size: size)
+        let shot = ScreenShot(screen: nil, image: image, displayBounds: CGRect(origin: .zero, size: size))
         let windows = [CGRect(x: 60, y: 40, width: 360, height: 260), CGRect(x: 380, y: 160, width: 360, height: 280)]
 
-        let choosing = OverlayView(frame: frame, image: image, windowRects: windows)
+        let choosing = CaptureSession(shots: [shot], windowRects: windows, makesWindows: false)
         choosing.simulateHover(at: CGPoint(x: 200, y: 150))
-        write(snapshot(choosing, image: image), to: "\(outputDir)/1-choosing.png")
+        write(snapshot(choosing.views[0], image: image), to: "\(outputDir)/1-choosing.png")
 
         let style = AnnotationStyle.shared
         let red = AnnotationStyle.colors[0], blue = AnnotationStyle.colors[3]
@@ -29,9 +29,9 @@ enum SelfTest {
                        points: [CGPoint(x: 300, y: 250), CGPoint(x: 440, y: 250)]),
             Annotation(tool: .text, color: red, width: 0, points: [CGPoint(x: 120, y: 200)], text: "文字标注 Text", fontSize: 18),
         ]
-        let selected = OverlayView(frame: frame, image: image, windowRects: windows)
+        let selected = CaptureSession(shots: [shot], windowRects: windows, makesWindows: false)
         selected.simulateSelection(CGRect(x: 100, y: 80, width: 480, height: 280), tool: .arrow, annotations: annotations)
-        write(snapshot(selected, image: image), to: "\(outputDir)/2-selected.png")
+        write(snapshot(selected.views[0], image: image), to: "\(outputDir)/2-selected.png")
 
         if let out = selected.renderSelection() {
             write(out.pngData, to: "\(outputDir)/3-export.png")

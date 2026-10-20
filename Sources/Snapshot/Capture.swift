@@ -4,7 +4,8 @@ import UniformTypeIdentifiers
 
 /// 一块屏幕的冻结画面。
 struct ScreenShot {
-    let screen: NSScreen
+    /// 渲染自检里没有真实屏幕，为 nil。
+    let screen: NSScreen?
     let image: CGImage
     /// CG 全局坐标（主屏左上角为原点，单位为点）。
     let displayBounds: CGRect

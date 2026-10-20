@@ -32,7 +32,7 @@ SIGN_IDENTITY="证书名称" ./scripts/build.sh
 |---|---|
 | `⌃⌘A` | 开始截图（菜单栏 → 快捷键：可改成 `⌥A`、`⇧⌘A`，或选“自定义…”录制任意组合键） |
 | 鼠标悬停 | 自动识别窗口，单击选中该窗口；没有窗口时选中整个屏幕 |
-| 拖动 | 框选区域 |
+| 拖动 | 框选区域，可以跨屏 |
 | 拖选区内部 / 边角 | 移动 / 调整大小（有标注后不能移动，仍可调整大小） |
 | 放大镜 | 显示坐标和颜色；`C` 复制颜色值，`Shift` 切换 RGB/HEX |
 | 工具栏 | 矩形、椭圆、箭头、画笔、文字、马赛克；粗细 3 档，颜色 8 种 |
@@ -52,8 +52,8 @@ SIGN_IDENTITY="证书名称" ./scripts/build.sh
 | `HotKey.swift` | 全局快捷键（Carbon `RegisterEventHotKey`，不需要辅助功能权限）、快捷键模型、键位和字符的换算 |
 | `HotKeyRecorder.swift` | 录制自定义快捷键的小窗口 |
 | `Capture.swift` | ScreenCaptureKit 截屏、窗口列表、复制和保存 |
-| `CaptureSession.swift` | 一次截图：每块屏幕一个遮罩窗口 |
-| `OverlayView.swift` | 选区、标注、放大镜、导出 |
+| `CaptureSession.swift` | 一次截图：每块屏幕一个遮罩窗口；选区、标注、工具条统一管理（可跨屏），导出时拼接各屏 |
+| `OverlayView.swift` | 一块屏幕的遮罩：画落在本屏的部分和放大镜，把鼠标键盘事件交给会话 |
 | `Annotation.swift` | 标注模型和绘制、画笔样式 |
 | `ToolbarView.swift` | 工具栏和粗细/颜色面板 |
 | `PinWindow.swift` | 钉图窗口 |
@@ -72,5 +72,5 @@ build/Snapshot.app/Contents/MacOS/Snapshot --selftest /tmp
 ## 未做
 
 - 长截图、OCR、截图录屏
-- 跨屏选区（选区只能在一块屏幕内）
+- 横跨两块屏幕的钉图只显示在其中一块上（系统设置里“显示器具有单独的空间”打开时，这是默认设置）
 - 开机自启需要手动在系统设置里加
