@@ -4,7 +4,7 @@
 
 ## 安装
 
-在 GitHub 仓库的 Actions → Windows → 最近一次成功的运行里下载 `EZSnap-windows`，解压后运行 `EZSnap-Setup-版本号.exe`。
+从 GitHub 仓库的 [Releases](../../../releases/latest) 下载 `EZSnap-Setup-版本号.exe` 运行。想要还没发布的最新构建，在 Actions → Windows → 最近一次成功的运行里下载 `EZSnap-windows`，解压后运行。
 
 - 装到当前用户自己的目录（`%LOCALAPPDATA%\Programs\EZSnap`），不需要管理员权限；开始菜单里有 EZSnap，卸载在“设置 → 应用”里。
 - 安装包没有代码签名，Windows 会提示“Windows 已保护你的电脑”：点“更多信息 → 仍要运行”。正式分发要买代码签名证书。

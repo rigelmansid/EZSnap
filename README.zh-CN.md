@@ -19,9 +19,9 @@
 
 </div>
 
-> **状态：早期。** Mac 版 0.1.0、Windows 版 0.1.1，都从源码构建，还没有发布正式版本。
-> Mac 版在 macOS 26（Apple Silicon）上运行。Windows 版在 GitHub 的 Windows 机器上通过了自检
-> （包括一次真实截屏），还没在真实的 Windows 10 电脑上试过。两个版本都没有签名，第一次打开时系统会提示。
+> **状态：早期。** 0.1.1 是[预发布版](../../releases/latest)，有两个系统的安装包。Mac 版在
+> macOS 26（Apple Silicon）上运行，Intel 版只在 Rosetta 下跑过。Windows 版在 GitHub 的 Windows 机器上
+> 通过了自检（包括一次真实截屏），还没在真实的 Windows 10 电脑上试过。两个安装包都没有签名，第一次打开时系统会提示。
 
 ---
 
@@ -61,9 +61,42 @@
 
 ## 安装
 
+从 [Releases](../../releases/latest) 下载对应系统的安装包。
+
 ### macOS
 
-需要 macOS 14 及以上和 Command Line Tools（`xcode-select --install`），不需要 Xcode。
+需要 macOS 14 及以上，Apple Silicon 和 Intel 都可以。
+
+1. 打开 `EZSnap-版本号.dmg`，把 **EZSnap** 拖到 **Applications**（应用程序）上。
+2. 在启动台或 Spotlight 里打开 EZSnap。app 没有经过公证，第一次打开会被拦：点 **完成**，到
+   **系统设置 → 隐私与安全性**，在关于 EZSnap 的提示旁点 **仍要打开**，再打开一次。
+   （macOS 14 上也可以按住 Control 点按 app，选 **打开**。）每下载一次只需要做一次。
+
+EZSnap 没有窗口和 Dock 图标，只在菜单栏放一个剪刀图标，第一次打开时会弹出简短提示。
+
+**屏幕录制权限。** 第一次截图时 macOS 会要求授权：在 **系统设置 → 隐私与安全性 → 屏幕与系统录音**
+里打开 EZSnap，然后退出 EZSnap（菜单栏剪刀图标 → 退出）再重新打开。
+
+想开机自动运行，在 **系统设置 → 通用 → 登录项** 里添加 EZSnap。
+
+升级时先退出 EZSnap，把新版拖到 **Applications** 上替换旧版。app 是 ad-hoc 签名的，macOS 可能会再要一次屏幕录制权限
+（见[常见问题](#常见问题)）。
+
+### Windows
+
+需要 Windows 10 1903 及以上或 Windows 11。系统自带 .NET Framework 4.8，不用另装运行时。
+
+运行 `EZSnap-Setup-版本号.exe`。安装包没有签名，Windows 会提示“Windows 已保护你的电脑”：
+点 **更多信息 → 仍要运行**。
+
+装在当前用户的 `%LOCALAPPDATA%\Programs\EZSnap`，不需要管理员权限。开始菜单里有 EZSnap，
+右下角托盘里有剪刀图标（可能收在 **^** 里）。卸载在 **设置 → 应用**。Windows 版不需要屏幕录制权限。
+
+Windows 版的更多说明见 [windows/README.md](windows/README.md)。
+
+### 从源码构建（macOS）
+
+需要 Command Line Tools（`xcode-select --install`），不需要 Xcode。
 
 ```bash
 git clone <仓库地址>
@@ -71,26 +104,8 @@ cd EZSnap
 ./scripts/install.sh
 ```
 
-它会构建 app 并装到当前用户的 `~/Applications/EZSnap.app`，不需要管理员密码。之后在启动台、
-Spotlight 或 Finder 里打开。EZSnap 没有窗口和 Dock 图标，只在菜单栏放一个剪刀图标，第一次打开时会弹出简短提示。
-
-**屏幕录制权限。** 第一次截图时 macOS 会要求授权：在 **系统设置 → 隐私与安全性 → 屏幕与系统录音**
-里打开 EZSnap，然后退出 EZSnap（菜单栏剪刀图标 → 退出）再重新打开。
-
-想开机自动运行，在 **系统设置 → 通用 → 登录项** 里添加 EZSnap。
-
-### Windows
-
-需要 Windows 10 1903 及以上或 Windows 11。系统自带 .NET Framework 4.8，不用另装运行时。
-
-1. 在 GitHub 上打开本仓库的 **Actions → Windows**，选最近一次成功的运行，下载 `EZSnap-windows`。
-2. 解压后运行 `EZSnap-Setup-版本号.exe`。安装包没有签名，Windows 会提示“Windows 已保护你的电脑”：
-   点 **更多信息 → 仍要运行**。
-
-装在当前用户的 `%LOCALAPPDATA%\Programs\EZSnap`，不需要管理员权限。开始菜单里有 EZSnap，
-右下角托盘里有剪刀图标（可能收在 **^** 里）。卸载在 **设置 → 应用**。Windows 版不需要屏幕录制权限。
-
-Windows 版的更多说明见 [windows/README.md](windows/README.md)。
+它会按你这台 Mac 的架构构建，装到当前用户的 `~/Applications/EZSnap.app`，不需要管理员密码。
+自己构建的 app 没有隔离标记，打开时 macOS 不会拦。
 
 ---
 
@@ -157,7 +172,7 @@ SIGN_IDENTITY="证书名称" ./scripts/install.sh
 
 - **没有签名和公证。** 第一次打开时 Gatekeeper、SmartScreen 会拦；正式发给别人用，需要 Apple 的
   Developer ID 和 Windows 的代码签名证书。
-- **还没有发布版本。** 两个版本都要从源码构建，或从 CI 的运行结果里下载。
+- **只有预发布版。** 还没有正式版本，见开头的状态说明。
 - **不做长截图、OCR、录屏。**
 - **没有“开机启动”开关。** 需要自己加到系统的登录项里。
 - **Mac 上横跨两块屏的钉图只显示在其中一块上**（系统设置里“显示器具有单独的空间”打开时，这是默认设置）。
@@ -169,6 +184,7 @@ SIGN_IDENTITY="证书名称" ./scripts/install.sh
 
 ```bash
 ./scripts/build.sh                                       # 只生成 build/EZSnap.app，不安装
+./scripts/package-mac.sh                                 # 生成 dist/EZSnap-版本号.dmg，Apple Silicon + Intel
 build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp   # 自检，PNG 写到 /tmp
 swift scripts/make-icon.swift Resources/AppIcon.icns     # 重新生成 Mac 图标
 swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # 重新生成 Windows 图标
@@ -180,7 +196,8 @@ swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # 重新生成 Windows 
 Windows 版用 `dotnet build windows/EZSnap/EZSnap.csproj -c Release` 构建，在 Mac 上也能编译，
 但只能在 Windows 上运行。每次推送都会在 Windows 机器上跑
 [.github/workflows/windows.yml](.github/workflows/windows.yml)：构建、自检（包括一次真实截屏）、
-用 Inno Setup 打安装包并上传。详见 [windows/README.md](windows/README.md)。
+用 Inno Setup 打安装包并上传。详见 [windows/README.md](windows/README.md)。版本号写在 `Resources/Info.plist`（Mac）、
+`windows/EZSnap/EZSnap.csproj` 和 `windows/installer/EZSnap.iss`（Windows）。
 
 <details>
 <summary><b>目录结构</b></summary>
@@ -198,7 +215,7 @@ Windows 版用 `dotnet build windows/EZSnap/EZSnap.csproj -c Release` 构建，�
 | `Sources/EZSnap/PinWindow.swift` | 钉图窗口 |
 | `Sources/EZSnap/L10n.swift` | 界面语言 |
 | `Sources/EZSnap/SelfTest.swift` | 自检 |
-| `scripts/` | `build.sh`、`install.sh`、图标生成脚本 |
+| `scripts/` | `build.sh`、`install.sh`、`package-mac.sh`（打 DMG）、图标生成脚本 |
 | `windows/` | Windows 版（C#、WinForms）和安装包脚本 |
 | `docs/` | 项目笔记、[决策](docs/decisions.md)和[踩过的坑](docs/pitfalls.md) |
 

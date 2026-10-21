@@ -125,3 +125,11 @@
 - 选择：A。LICENSE 和用户的 CodaPace、meshlink 用同一份文本、同一个署名。
 - 理由：用户决定；和另外两个项目一致。
 - 影响：两份 README 都加了 MIT 徽章和许可证一节。仓库目前仍是私有的，许可证在公开或分发时才有实际作用。
+
+### D-15 在 GitHub Releases 发安装包：Mac 用 DMG，Windows 用 Inno Setup 安装程序（2026-10-21，agent 选择）
+
+- 背景：用户要 Mac 和 Windows 各一个安装包，推送到 GitHub。之前 Mac 只能从源码装，Windows 只能从 Actions 下载。
+- 选项：Mac 用 DMG（拖进“应用程序”）/ zip（CodaPace 的做法）；只编本机架构 / Apple Silicon + Intel；正式版 / 预发布版
+- 选择：Mac 用 DMG，同时编两种架构（scripts/package-mac.sh，本机打包）；Windows 用 CI 打出的安装程序；两边版本号统一为 0.1.1，发成预发布版，tag v0.1.1。
+- 理由：DMG 是 Mac 上最常见的安装方式；发给别人时不知道对方的芯片；Windows 版还没在真机上试过，Mac 的 Intel 版只在 Rosetta 下跑过，所以是预发布。
+- 影响：发新版要改三处版本号（Resources/Info.plist、EZSnap.csproj、EZSnap.iss），Mac 包在本机打，Windows 包取 CI 的产物，再用 gh release 上传。都没签名，签名方式仍待定（D-3）。

@@ -19,10 +19,11 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
 
 </div>
 
-> **Status: early.** Mac 0.1.0 and Windows 0.1.1, built from source; no release has been published
-> yet. The Mac version runs on macOS 26 (Apple Silicon). The Windows version has passed its
-> self-test, including a real screen capture, on GitHub's Windows runners, but has not yet been
-> tried on a real Windows 10 PC. Neither build is signed, so both systems warn on first launch.
+> **Status: early.** 0.1.1 is a [prerelease](../../releases/latest) with installers for both
+> systems. The Mac version runs on macOS 26 (Apple Silicon); the Intel build has only been run under
+> Rosetta. The Windows version has passed its self-test, including a real screen capture, on GitHub's
+> Windows runners, but has not yet been tried on a real Windows 10 PC. Neither installer is signed,
+> so both systems warn on first launch.
 
 ---
 
@@ -68,21 +69,20 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
 
 ## Install
 
+Download the installer for your system from [Releases](../../releases/latest).
+
 ### macOS
 
-Requires macOS 14 or later and the Command Line Tools (`xcode-select --install`); Xcode itself
-isn't needed.
+Requires macOS 14 or later, on Apple Silicon or Intel.
 
-```bash
-git clone <repository URL>
-cd EZSnap
-./scripts/install.sh
-```
+1. Open `EZSnap-<version>.dmg` and drag **EZSnap** onto **Applications**.
+2. Open EZSnap from Launchpad or Spotlight. The app isn't notarized, so the first time macOS blocks
+   it: click **Done**, go to **System Settings → Privacy & Security**, click **Open Anyway** next to
+   the message about EZSnap, and open it again. (On macOS 14 you can instead Control-click the app
+   and choose **Open**.) This is needed once per download.
 
-This builds the app and installs it to `~/Applications/EZSnap.app` for the current user, with no
-administrator password. Open it from Launchpad, Spotlight or Finder. EZSnap has no window and no
-Dock icon: it lives in the menu bar as a pair of scissors, and shows a short hint the first time it
-opens.
+EZSnap has no window and no Dock icon: it lives in the menu bar as a pair of scissors, and shows a
+short hint the first time it opens.
 
 **Screen recording permission.** macOS asks for it on the first capture. Turn on EZSnap under
 **System Settings → Privacy & Security → Screen & System Audio Recording**, then quit EZSnap (menu
@@ -90,15 +90,17 @@ bar scissors → Quit) and open it again.
 
 To start it at login, add EZSnap under **System Settings → General → Login Items**.
 
+To upgrade, quit EZSnap and drag the new version onto **Applications**, replacing the old one.
+Because the app is ad-hoc signed, macOS may ask for screen recording permission again (see
+[FAQ](#faq)).
+
 ### Windows
 
 Requires Windows 10 version 1903 or later, or Windows 11. .NET Framework 4.8 is built in, so
 nothing else needs to be installed.
 
-1. In this repository on GitHub, open **Actions → Windows**, pick the latest successful run and
-   download the `EZSnap-windows` artifact.
-2. Unzip it and run `EZSnap-Setup-<version>.exe`. The installer is unsigned, so Windows shows
-   "Windows protected your PC": click **More info → Run anyway**.
+Run `EZSnap-Setup-<version>.exe`. The installer is unsigned, so Windows shows "Windows protected
+your PC": click **More info → Run anyway**.
 
 It installs for the current user under `%LOCALAPPDATA%\Programs\EZSnap`, with no administrator
 rights. EZSnap appears in the Start menu and as a pair of scissors in the system tray (it may be
@@ -106,6 +108,20 @@ hidden under **^**). Uninstall it from **Settings → Apps**. Windows needs no s
 permission.
 
 More about the Windows version: [windows/README.md](windows/README.md) (Chinese).
+
+### Build from source (macOS)
+
+Needs the Command Line Tools (`xcode-select --install`); Xcode itself isn't needed.
+
+```bash
+git clone <repository URL>
+cd EZSnap
+./scripts/install.sh
+```
+
+This builds the app for your Mac and installs it to `~/Applications/EZSnap.app` for the current
+user, with no administrator password. A build you make yourself isn't quarantined, so macOS doesn't
+block it.
 
 ---
 
@@ -175,7 +191,7 @@ Screenshots go only to the clipboard, or to the file you choose.
 
 - **Unsigned and not notarized.** Gatekeeper and SmartScreen warn on first launch; distributing to
   others properly needs a Developer ID (Mac) and a code-signing certificate (Windows).
-- **No published release.** Both versions are built from source or taken from a CI run.
+- **Prerelease only.** No stable version yet; see the status note at the top.
 - **No long screenshots, OCR or screen recording.** These are out of scope.
 - **No start-at-login setting.** Add EZSnap to the system's login items yourself.
 - **A pin spanning two Mac screens shows on only one of them** when *Displays have separate Spaces*
@@ -189,6 +205,7 @@ Screenshots go only to the clipboard, or to the file you choose.
 
 ```bash
 ./scripts/build.sh                                       # build/EZSnap.app only, no install
+./scripts/package-mac.sh                                 # dist/EZSnap-<version>.dmg, Apple Silicon + Intel
 build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp   # self-test, writes PNGs to /tmp
 swift scripts/make-icon.swift Resources/AppIcon.icns     # regenerate the Mac icon
 swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # regenerate the Windows icon
@@ -202,7 +219,8 @@ The Windows version builds with `dotnet build windows/EZSnap/EZSnap.csproj -c Re
 too, though it only runs on Windows. Each push runs
 [.github/workflows/windows.yml](.github/workflows/windows.yml) on a Windows runner: build,
 self-test (including one real capture), and the Inno Setup installer as an artifact. Details are in
-[windows/README.md](windows/README.md).
+[windows/README.md](windows/README.md). The version number is set in `Resources/Info.plist` (Mac),
+`windows/EZSnap/EZSnap.csproj` and `windows/installer/EZSnap.iss` (Windows).
 
 <details>
 <summary><b>Project layout</b></summary>
@@ -220,7 +238,7 @@ self-test (including one real capture), and the Inno Setup installer as an artif
 | `Sources/EZSnap/PinWindow.swift` | Pinned screenshots |
 | `Sources/EZSnap/L10n.swift` | Interface languages |
 | `Sources/EZSnap/SelfTest.swift` | Self-test |
-| `scripts/` | `build.sh`, `install.sh`, the icon generator |
+| `scripts/` | `build.sh`, `install.sh`, `package-mac.sh` (the DMG), the icon generator |
 | `windows/` | The Windows version (C#, WinForms) and its installer script |
 | `docs/` | Project notes, [decisions](docs/decisions.md) and [pitfalls](docs/pitfalls.md), in Chinese |
 

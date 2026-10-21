@@ -5,3 +5,4 @@ private-notes.md
 windows/*/bin/
 windows/*/obj/
 windows/dist/
+dist/
