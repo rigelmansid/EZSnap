@@ -18,7 +18,7 @@ Updated: 2026-10-21 08:43
 - 给谁用：发给别人用（D-3）。
 - 目标：方便快速截图，并标注。
 - 不做什么：长截图、OCR、截图录屏、开机自启。
-- 仓库：GitHub 私有仓库，地址见 private-notes.md（D-7）。
+- 仓库：GitHub 公开仓库，地址见 private-notes.md（D-7、D-16）；安装包在 Releases（D-15）。
 
 ## 待办
 

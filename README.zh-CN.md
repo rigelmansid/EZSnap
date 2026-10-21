@@ -19,7 +19,7 @@
 
 </div>
 
-> **状态：早期。** 0.1.1 是[预发布版](../../releases/latest)，有两个系统的安装包。Mac 版在
+> **状态：早期。** [0.1.1](../../releases/latest) 是第一个发布版，有两个系统的安装包。Mac 版在
 > macOS 26（Apple Silicon）上运行，Intel 版只在 Rosetta 下跑过。Windows 版在 GitHub 的 Windows 机器上
 > 通过了自检（包括一次真实截屏），还没在真实的 Windows 10 电脑上试过。两个安装包都没有签名，第一次打开时系统会提示。
 
@@ -172,7 +172,6 @@ SIGN_IDENTITY="证书名称" ./scripts/install.sh
 
 - **没有签名和公证。** 第一次打开时 Gatekeeper、SmartScreen 会拦；正式发给别人用，需要 Apple 的
   Developer ID 和 Windows 的代码签名证书。
-- **只有预发布版。** 还没有正式版本，见开头的状态说明。
 - **不做长截图、OCR、录屏。**
 - **没有“开机启动”开关。** 需要自己加到系统的登录项里。
 - **Mac 上横跨两块屏的钉图只显示在其中一块上**（系统设置里“显示器具有单独的空间”打开时，这是默认设置）。
