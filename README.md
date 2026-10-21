@@ -1,83 +1,233 @@
+<div align="center">
+
+<img src="docs/images/icon.png" width="128" alt="EZSnap icon">
+
 # EZSnap
 
-截图并标注的 macOS 菜单栏小工具。Swift + AppKit，不依赖第三方库。
+**Grab part of the screen, mark it up, paste it.**
 
-要求：macOS 14 及以上；只需 Command Line Tools，不需要 Xcode。
+A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
+(system tray). Hover to pick a window or drag a region, annotate it in place, then copy, save or pin it.
 
-Windows 10 / 11 版在 [windows/](windows/README.md)，功能和这里对应。
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)](#macos)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4)](#windows)
+[![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)](#development)
+[![.NET Framework 4.8](https://img.shields.io/badge/.NET%20Framework-4.8-512BD4)](windows/README.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
-## 安装与运行
+**English** · [简体中文](README.zh-CN.md)
+
+</div>
+
+> **Status: early.** Mac 0.1.0 and Windows 0.1.1, built from source; no release has been published
+> yet. The Mac version runs on macOS 26 (Apple Silicon). The Windows version has passed its
+> self-test, including a real screen capture, on GitHub's Windows runners, but has not yet been
+> tried on a real Windows 10 PC. Neither build is signed, so both systems warn on first launch.
+
+---
+
+## Why EZSnap
+
+- **One shortcut, then everything happens on the screen.** No window to open and no file to name:
+  the screen freezes, you pick what you want, mark it up and press Enter. It's on the clipboard.
+- **Windows are picked for you.** Hovering highlights the window under the mouse; a single click
+  selects all of it, even when it spans two screens.
+- **Annotate before you share.** Rectangles, ellipses, arrows, pen, text and mosaic, drawn directly
+  on the frozen screen, with undo.
+- **Small and local.** No third-party libraries, no account, no network access. Settings stay on
+  your computer.
+
+---
+
+## Features
+
+### Capture
+- Hover to highlight a window, click to select it; with no window under the mouse, the whole screen
+- Drag to select a region, across screens if you like; drag inside to move it, drag the edges or
+  corners to resize
+- A magnifier shows the coordinates and color under the mouse: `C` copies the color, `Shift`
+  switches between RGB and HEX
+- The selection size is shown above its corner
+
+### Annotate
+- Rectangle, ellipse, arrow, pen, text and mosaic
+- Three sizes and eight colors
+- Undo the last mark with `⌘Z` / `Ctrl+Z`
+
+### Finish
+- Copy to the clipboard: double-click the selection, press `Enter`, or `⌘C` / `Ctrl+C`
+- Save as PNG: `⌘S` / `Ctrl+S` or the save button. The file name defaults to the date and time
+- Pin: keep the shot on top of every window. Drag to move, scroll to zoom, double-click or `Esc` to
+  close, right-click to copy or save
+
+### Shortcut and language
+- The capture shortcut can be one of three presets or any combination you record
+- English, 简体中文 and 繁體中文, or follow the system. A change applies at once, no restart
+
+---
+
+## Install
+
+### macOS
+
+Requires macOS 14 or later and the Command Line Tools (`xcode-select --install`); Xcode itself
+isn't needed.
 
 ```bash
-./scripts/install.sh        # 打包并装到 ~/Applications/EZSnap.app
+git clone <repository URL>
+cd EZSnap
+./scripts/install.sh
 ```
 
-之后在 Finder 的“应用程序”（用户目录下）、启动台或 Spotlight 里找到 EZSnap，双击打开。
-它没有窗口和 Dock 图标，只在屏幕右上角菜单栏放一个剪刀图标；第一次打开和运行中再次双击时会弹出提示。
+This builds the app and installs it to `~/Applications/EZSnap.app` for the current user, with no
+administrator password. Open it from Launchpad, Spotlight or Finder. EZSnap has no window and no
+Dock icon: it lives in the menu bar as a pair of scissors, and shows a short hint the first time it
+opens.
 
-只想打包不安装：`./scripts/build.sh` 生成 `build/EZSnap.app`。图标由 `swift scripts/make-icon.swift Resources/AppIcon.icns` 生成。
+**Screen recording permission.** macOS asks for it on the first capture. Turn on EZSnap under
+**System Settings → Privacy & Security → Screen & System Audio Recording**, then quit EZSnap (menu
+bar scissors → Quit) and open it again.
 
-首次运行需要授予屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统录音 → 打开 EZSnap，
-然后退出 EZSnap（菜单栏剪刀图标 → 退出）再重新打开。
+To start it at login, add EZSnap under **System Settings → General → Login Items**.
 
-想开机自动运行，在“系统设置 → 通用 → 登录项”里添加 EZSnap。
+### Windows
 
-### 重新编译后权限失效
+Requires Windows 10 version 1903 or later, or Windows 11. .NET Framework 4.8 is built in, so
+nothing else needs to be installed.
 
-默认用 ad-hoc 签名，每次编译签名都会变，系统会认为是新应用，需要重新授权
-（在权限列表里先删掉旧的 EZSnap 再加）。想避免这一点，在“钥匙串访问 → 证书助理 → 创建证书”
-建一个“代码签名”类型的自签名证书，然后：
+1. In this repository on GitHub, open **Actions → Windows**, pick the latest successful run and
+   download the `EZSnap-windows` artifact.
+2. Unzip it and run `EZSnap-Setup-<version>.exe`. The installer is unsigned, so Windows shows
+   "Windows protected your PC": click **More info → Run anyway**.
+
+It installs for the current user under `%LOCALAPPDATA%\Programs\EZSnap`, with no administrator
+rights. EZSnap appears in the Start menu and as a pair of scissors in the system tray (it may be
+hidden under **^**). Uninstall it from **Settings → Apps**. Windows needs no screen recording
+permission.
+
+More about the Windows version: [windows/README.md](windows/README.md) (Chinese).
+
+---
+
+## Usage
+
+| Action | macOS | Windows |
+|---|---|---|
+| Start a capture | `⌃⌘A` | `Ctrl+Alt+A` |
+| Other shortcut presets | `⌥A`, `⇧⌘A` | `Alt+A`, `Ctrl+Shift+A` |
+| Pick a window | Hover, then click | Same |
+| Select a region | Drag, across screens if needed | Same |
+| Move / resize the selection | Drag inside / drag edges and corners (once you've drawn on it, it can be resized but not moved) | Same |
+| Copy the color under the mouse | `C`; `Shift` switches RGB / HEX | Same |
+| Copy and finish | Double-click the selection, `Enter` or `⌘C` | Double-click, `Enter` or `Ctrl+C` |
+| Save as PNG | `⌘S` or the save button | `Ctrl+S` or the save button |
+| Undo the last mark | `⌘Z` | `Ctrl+Z` |
+| Pin to the screen | Pin button | Same |
+| Cancel the selection | Right-click | Same |
+| Quit the capture | `Esc` (or right-click with no selection) | Same |
+| Change the shortcut | Menu bar → Shortcut → a preset or Custom… | Tray menu → Shortcut |
+| Change the language | Menu bar → Language | Tray menu → Language |
+
+In the text tool, `⌘X` `⌘C` `⌘V` `⌘A` `⌘Z` (the `Ctrl` versions on Windows) edit the text as
+usual; `Enter` or `Esc` ends typing.
+
+---
+
+## FAQ
+
+<details>
+<summary><b>macOS asks for screen recording permission again after I rebuilt the app</b></summary>
+
+The app is ad-hoc signed, and that signature changes with every build, so macOS treats each build
+as a new app. Remove the old EZSnap from the permission list and add it again. To avoid this, create
+a self-signed code-signing certificate (**Keychain Access → Certificate Assistant → Create a
+Certificate**, type *Code Signing*) and build with it:
 
 ```bash
-SIGN_IDENTITY="证书名称" ./scripts/build.sh
+SIGN_IDENTITY="certificate name" ./scripts/install.sh
+```
+</details>
+
+<details>
+<summary><b>The shortcut doesn't work</b></summary>
+
+Another app may already use it; the menu then says *Shortcut (registration failed, may be in use)*.
+Pick another preset or record your own under **Shortcut → Custom…**. The recorder refuses
+combinations that would take over everyday shortcuts, such as `⌘` alone on the Mac or `Ctrl` alone
+on Windows. Function keys (F1–F20 on the Mac, F1–F24 on Windows) can be used on their own.
+</details>
+
+<details>
+<summary><b>What does EZSnap store, and does it send anything?</b></summary>
+
+It makes no network connections. It stores only the chosen shortcut, the language and the last
+folder you saved to:
+
+- **macOS:** the app's preferences (`~/Library/Preferences/local.ezsnap.app.plist`)
+- **Windows:** `%APPDATA%\EZSnap\settings.txt`, which the uninstaller leaves in place
+
+Screenshots go only to the clipboard, or to the file you choose.
+</details>
+
+---
+
+## Known limitations
+
+- **Unsigned and not notarized.** Gatekeeper and SmartScreen warn on first launch; distributing to
+  others properly needs a Developer ID (Mac) and a code-signing certificate (Windows).
+- **No published release.** Both versions are built from source or taken from a CI run.
+- **No long screenshots, OCR or screen recording.** These are out of scope.
+- **No start-at-login setting.** Add EZSnap to the system's login items yourself.
+- **A pin spanning two Mac screens shows on only one of them** when *Displays have separate Spaces*
+  is on, which is the macOS default.
+- **Windows:** the text box is dark gray while you type (WinForms text boxes can't be transparent);
+  the installer is in English only.
+
+---
+
+## Development
+
+```bash
+./scripts/build.sh                                       # build/EZSnap.app only, no install
+build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp   # self-test, writes PNGs to /tmp
+swift scripts/make-icon.swift Resources/AppIcon.icns     # regenerate the Mac icon
+swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # regenerate the Windows icon
 ```
 
-## 用法
+The self-test needs no screen recording permission. It drives a capture session with synthetic
+images and writes the overlay and the exported result as PNGs. It covers drawing and export, not
+screen capture, the shortcut or mouse and keyboard handling.
 
-| 操作 | 说明 |
+The Windows version builds with `dotnet build windows/EZSnap/EZSnap.csproj -c Release`, on a Mac
+too, though it only runs on Windows. Each push runs
+[.github/workflows/windows.yml](.github/workflows/windows.yml) on a Windows runner: build,
+self-test (including one real capture), and the Inno Setup installer as an artifact. Details are in
+[windows/README.md](windows/README.md).
+
+<details>
+<summary><b>Project layout</b></summary>
+
+| Path | What it is |
 |---|---|
-| `⌃⌘A` | 开始截图（菜单栏 → 快捷键：可改成 `⌥A`、`⇧⌘A`，或选“自定义…”录制任意组合键） |
-| 鼠标悬停 | 自动识别窗口，单击选中该窗口；没有窗口时选中整个屏幕 |
-| 拖动 | 框选区域，可以跨屏 |
-| 拖选区内部 / 边角 | 移动 / 调整大小（有标注后不能移动，仍可调整大小） |
-| 放大镜 | 显示坐标和颜色；`C` 复制颜色值，`Shift` 切换 RGB/HEX |
-| 工具栏 | 矩形、椭圆、箭头、画笔、文字、马赛克；粗细 3 档，颜色 8 种 |
-| 双击选区 / `Enter` / `⌘C` | 完成，复制到剪贴板 |
-| `⌘S` / 保存按钮 | 另存为 PNG |
-| 钉图按钮 | 把截图钉在屏幕最上层：拖动移动，滚轮缩放，双击或 `Esc` 关闭，右键菜单可复制、另存 |
-| `⌘Z` | 撤销上一个标注 |
-| 文字框里 | `⌘X`、`⌘C`、`⌘V`、`⌘A`、`⌘Z` 是普通的文字编辑；`⌘S` 直接保存；`Enter` 或 `Esc` 结束输入 |
-| 右键 | 有选区时取消选区，没有选区时退出 |
-| `Esc` | 退出截图 |
-| 菜单栏 → 语言 / Language | 跟随系统、English、简体中文、繁體中文，选了立即生效（默认跟随系统） |
+| `Sources/EZSnap/AppDelegate.swift` | Menu bar icon and menu, shortcut choice, the hidden main menu that dispatches `⌘` shortcuts, the capture flow, pins |
+| `Sources/EZSnap/HotKey.swift` | Global shortcut (Carbon `RegisterEventHotKey`, needs no Accessibility permission) and the shortcut model |
+| `Sources/EZSnap/HotKeyRecorder.swift` | The small window that records a custom shortcut |
+| `Sources/EZSnap/Capture.swift` | ScreenCaptureKit capture, the window list, copy and save |
+| `Sources/EZSnap/CaptureSession.swift` | One capture: an overlay per screen, with the selection, marks and toolbar shared across screens; stitches the screens on export |
+| `Sources/EZSnap/OverlayView.swift` | One screen's overlay: draws its part and the magnifier, passes mouse and keyboard to the session |
+| `Sources/EZSnap/Annotation.swift` | Annotation model, drawing and pen styles |
+| `Sources/EZSnap/ToolbarView.swift` | Toolbar and the size / color panel |
+| `Sources/EZSnap/PinWindow.swift` | Pinned screenshots |
+| `Sources/EZSnap/L10n.swift` | Interface languages |
+| `Sources/EZSnap/SelfTest.swift` | Self-test |
+| `scripts/` | `build.sh`, `install.sh`, the icon generator |
+| `windows/` | The Windows version (C#, WinForms) and its installer script |
+| `docs/` | Project notes, [decisions](docs/decisions.md) and [pitfalls](docs/pitfalls.md), in Chinese |
 
-## 结构
+</details>
 
-| 文件 | 内容 |
-|---|---|
-| `AppDelegate.swift` | 菜单栏图标、快捷键选择、不显示的主菜单（分发 ⌘ 快捷键）、截图流程、钉图管理 |
-| `HotKey.swift` | 全局快捷键（Carbon `RegisterEventHotKey`，不需要辅助功能权限）、快捷键模型、键位和字符的换算 |
-| `HotKeyRecorder.swift` | 录制自定义快捷键的小窗口 |
-| `Capture.swift` | ScreenCaptureKit 截屏、窗口列表、复制和保存 |
-| `CaptureSession.swift` | 一次截图：每块屏幕一个遮罩窗口；选区、标注、工具条统一管理（可跨屏），导出时拼接各屏 |
-| `OverlayView.swift` | 一块屏幕的遮罩：画落在本屏的部分和放大镜，把鼠标键盘事件交给会话 |
-| `Annotation.swift` | 标注模型和绘制、画笔样式 |
-| `ToolbarView.swift` | 工具栏和粗细/颜色面板 |
-| `PinWindow.swift` | 钉图窗口 |
-| `SelfTest.swift` | 渲染自检 |
+---
 
-## 自检
+## License
 
-不需要屏幕录制权限，用合成图片渲染遮罩界面和导出结果，输出 PNG 供查看：
-
-```bash
-build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp
-```
-
-只覆盖绘制和导出，不覆盖截屏、快捷键和鼠标键盘交互。
-
-## 未做
-
-- 长截图、OCR、截图录屏
-- 横跨两块屏幕的钉图只显示在其中一块上（系统设置里“显示器具有单独的空间”打开时，这是默认设置）
-- 开机自启需要手动在系统设置里加
+[MIT](LICENSE)
