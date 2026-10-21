@@ -5,7 +5,7 @@
 ## Handoff
 
 Updated: 2026-10-21 08:43
-- Task: 无，上一个工作单元：改名 EZSnap 并做成可双击安装的 app、Windows 10 版、三种界面语言，都已合并推送（main 在 89f9839，只剩 main 一个分支；提交号是 2026-10-21 改写历史后的）
+- Task: 无，上一个工作单元：改名 EZSnap 并做成可双击安装的 app、Windows 10 版、三种界面语言，都已合并推送（main 在 4131be2，只剩 main 一个分支；提交号是 2026-10-21 第二次改写历史后的）
 - Stopped at: 工作区干净；Mac 新版在 build/EZSnap.app（未装进 ~/Applications）；Windows 安装包在 GitHub Actions → Windows 最近一次运行的 EZSnap-windows 产物里
 - Decisions: D-9～D-12（D-12 的“代码内三语文案”和 D-11 的“.NET Framework 4.8”是 agent 选择，用户未逐条确认）
 - Waiting on user: Mac 和 Windows 的真机验证；签名方式；离屏测试是否入库；敏感词文件要拦哪些词
