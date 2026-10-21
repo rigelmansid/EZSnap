@@ -134,6 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         let permission = NSMenuItem(title: L("Screen Recording Permission…", "屏幕录制权限设置…", "螢幕錄製權限設定…"), action: #selector(openPermissionSettings), keyEquivalent: "")
         permission.target = self
+        // macOS 26 会自动给“退出”配图标，同组没图标的项会空出图标位；这里也配一个，两项对齐。
+        permission.image = NSImage(systemSymbolName: "lock.shield", accessibilityDescription: nil)
         menu.addItem(permission)
         menu.addItem(NSMenuItem(title: L("Quit", "退出", "結束"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
