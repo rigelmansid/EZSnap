@@ -4,20 +4,20 @@
 
 ## Handoff
 
-Updated: 2026-10-20 15:58
-- Task: 无，上一个工作单元：代码审查后两轮修复、自定义快捷键、跨屏选区，已推送到 GitHub（main 在 031ced9）
-- Stopped at: 全部已提交推送，工作区干净；build/Snapshot.app 是最新版，但用户正在运行的还是 11:31 启动的原始版本
-- Decisions: D-1～D-8（D-6、D-8 是 agent 选择，用户未逐条确认）
-- Waiting on user: 真机验证（退出旧版，open build/Snapshot.app，重新授权屏幕录制）；签名方式；离屏测试是否入库；敏感词文件要拦哪些词
-- Next: 1. 按待办里三条“在真实应用里验证”逐项试，记下问题 2. 用户定了离屏测试去留后，整理进项目或删掉 /tmp/p016fix.ukEeMf
-- Don't repeat: 不要一次派多个子代理（账号 API 并发上限 3，会 429）；重新打包会换 ad-hoc 签名，要用户重新授权，别无谓打包；不要用 perl/sed 往文件里写中文（出现过 U+FFFD），用 Edit
+Updated: 2026-10-21 08:43
+- Task: 无，上一个工作单元：改名 EZSnap 并做成可双击安装的 app、Windows 10 版、三种界面语言，都已合并推送（main 在 b7e0bf6，只剩 main 一个分支）
+- Stopped at: 工作区干净；Mac 新版在 build/EZSnap.app（未装进 ~/Applications）；Windows 安装包在 GitHub Actions → Windows 最近一次运行的 EZSnap-windows 产物里
+- Decisions: D-9～D-12（D-12 的“代码内三语文案”和 D-11 的“.NET Framework 4.8”是 agent 选择，用户未逐条确认）
+- Waiting on user: Mac 和 Windows 的真机验证；签名方式；离屏测试是否入库；敏感词文件要拦哪些词
+- Next: 1. 用户退出旧版后运行 ./scripts/install.sh，按待办的“在真实应用里验证”和“切换三种语言”逐项试 2. Windows 10 上装 CI 产物，按 D-11 那条清单试，问题记进待办
+- Don't repeat: 不要一次派多个子代理（API 并发上限 3）；重新打包会换 ad-hoc 签名，要重新授权；写中文后一定查 U+FFFD（坑 5）；钩子误报不要 --no-verify（坑 4）；Windows 版只能靠 CI 和真机验证，这台 Mac 跑不了
 
 ## 项目概况
 
-- 是什么：截图并标注的 macOS 菜单栏小工具，Swift + AppKit，不依赖第三方库。用法、构建和代码结构见 [README](../README.md)。
+- 是什么：截图并标注的小工具。Mac 版是菜单栏应用（Swift + AppKit），见 [README](../README.md)；Windows 10/11 版是托盘程序（C# + WinForms，D-11），见 [windows/README.md](../windows/README.md)。界面有 English、简体中文、繁體中文（D-12）。
 - 给谁用：发给别人用（D-3）。
 - 目标：方便快速截图，并标注。
-- 不做什么：长截图、OCR、截图录屏、开机自启。跨屏选区和自定义快捷键要做，见待办。
+- 不做什么：长截图、OCR、截图录屏、开机自启。
 - 仓库：GitHub 私有仓库，地址见 private-notes.md（D-7）。
 
 ## 待办

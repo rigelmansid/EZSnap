@@ -33,3 +33,24 @@
 - 原因：没完全查清：可能 AppKit 先查主菜单再查窗口里的视图，也可能是测试里伪造的 key 窗口没被问到。另外，测试里用 postEvent 放进队列的事件，nextEvent 取不出来。
 - 修法：录制期间装本地事件监视器（NSEvent.addLocalMonitorForEvents），它在 NSApp.sendEvent 里先于主菜单拿到按键，不依赖分发顺序；测试直接调用 NSApp.sendEvent。
 - 启示：要在主菜单之前截下带 ⌘ 的组合键，用本地事件监视器，不要依赖视图的 performKeyEquivalent。
+
+### 坑 4 pre-commit 钩子把 app.manifest 里的 publicKeyToken 当成密钥（2026-10-21，已解决 2026-10-21）
+
+- 现象：提交 Windows 版时被钩子拦下：app.manifest 第 27 行的 publicKeyToken（一串 16 位十六进制）报 [secret]。记这个坑时原样抄了那串值，又被拦了一次。
+- 原因：钩子按“名字像 TOKEN、值是 16 位以上带数字的串”判断密钥；这是微软通用控件库公开的标识，属于误报。
+- 修法：不绕过钩子，删掉 manifest 里这段依赖声明（Program.cs 的 Application.EnableVisualStyles() 已经启用新样式控件）。
+- 启示：钩子误报时先找能去掉的内容；去不掉再告诉用户，不用 --no-verify。另外提交失败时命令要停下，那次没停，把没有新提交的分支也推了上去。
+
+### 坑 5 用 Write 写进文件的中文也会冒出 U+FFFD（2026-10-21，已解决 2026-10-21）
+
+- 现象：新建的 windows/EZSnap/SelfTest.cs 注释里“交互”的“互”变成了 U+FFFD；之前用 perl 改测试程序时也出现过。
+- 原因：模型输出个别汉字时会产生坏字节，和用哪个工具写无关。
+- 修法：每次写完中文都用 grep 查 U+FFFD，查到的按码点替换（这次用 python 写入 U+4E92）。
+- 启示：写中文的文件、提交说明都要查，不只是改文档时查（RULE 第 7 节）。
+
+### 坑 6 Windows 版一截图就报 CopyPixelOperation 参数无效（2026-10-21，已解决 2026-10-21）
+
+- 现象：用户在 Windows 10 上截图，弹出“Capture Failed：The value of argument 'value' (1087111200) is invalid for Enum type 'CopyPixelOperation'”。
+- 原因：.NET Framework 的 Graphics.CopyFromScreen 会校验参数，只认单个取值，SourceCopy | CaptureBlt（0x40CC0020）被拒；CI 的自检只渲染合成图片，从没调用过真实截屏，所以没发现。
+- 修法：改为直接调用 BitBlt（SRCCOPY | CAPTUREBLT），截图格式用不带透明通道的 32 位；自检里加上真实截屏和取窗口列表，CI 上也会跑到。
+- 启示：自检不能只测“画”，真正和系统打交道的入口至少要在 CI 上调用一次；Windows 版的 API 行为要以 .NET Framework 4.8 为准，不能按新版 .NET 的文档想当然。

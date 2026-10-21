@@ -75,9 +75,24 @@ namespace EZSnap
             foreach (var screen in Screen.AllScreens)
             {
                 var b = screen.Bounds;
-                var image = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppPArgb);
+                // 不用 Graphics.CopyFromScreen：.NET Framework 会校验参数，SourceCopy | CaptureBlt 这个组合直接报错（坑 6）。
+                // 直接调 BitBlt；CAPTUREBLT 让半透明（分层）窗口也截进来。不带透明通道，GDI 不会往里写透明度。
+                var image = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppRgb);
                 using (var g = Graphics.FromImage(image))
-                    g.CopyFromScreen(b.Location, Point.Empty, b.Size, CopyPixelOperation.SourceCopy | CopyPixelOperation.CaptureBlt);
+                {
+                    var dest = g.GetHdc();
+                    var screenDC = Native.GetDC(IntPtr.Zero);
+                    try
+                    {
+                        if (!Native.BitBlt(dest, 0, 0, b.Width, b.Height, screenDC, b.X, b.Y, Native.SRCCOPY | Native.CAPTUREBLT))
+                            throw new System.ComponentModel.Win32Exception();
+                    }
+                    finally
+                    {
+                        Native.ReleaseDC(IntPtr.Zero, screenDC);
+                        g.ReleaseHdc(dest);
+                    }
+                }
                 shots.Add(new ScreenShot
                 {
                     Bounds = b,

@@ -1,7 +1,7 @@
 ; EZSnap Windows installer (Inno Setup 6). Built by .github/workflows/windows.yml (D-11).
 ; Per-user install: no administrator rights needed, like ~/Applications on the Mac version.
 
-#define AppVersion "0.1.0"
+#define AppVersion "0.1.1"
 #define Bin "..\EZSnap\bin\Release\net48"
 
 [Setup]

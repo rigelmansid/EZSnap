@@ -30,6 +30,7 @@ namespace EZSnap
                 CrossScreen(dir);
                 Shortcuts();
                 Languages();
+                RealCapture(dir);
             }
             catch (Exception e)
             {
@@ -172,6 +173,26 @@ namespace EZSnap
             Check("自定义快捷键存了能读回来", Shortcut.Parse(custom.Serialize()) == custom && custom.Title == "Ctrl+Shift+5", custom.Title);
             var name = CapturedImage.DefaultFileName(new DateTime(2026, 10, 21, 9, 5, 7));
             Check("默认文件名：截图 2026-10-21 09.05.07.png（公历、阿拉伯数字）", name == "截图 2026-10-21 09.05.07.png", name);
+        }
+
+        // MARK: 真实截屏（坑 6）：在 CI 的 Windows 机器上也真的截一次，至少保证不报错、尺寸对
+
+        private static void RealCapture(string dir)
+        {
+            var shots = Capturer.CaptureAll();
+            Check("真实截屏：每块屏都截到了", shots.Count == Screen.AllScreens.Length && shots.Count > 0, shots.Count + " / " + Screen.AllScreens.Length);
+            Check("真实截屏：图片和屏幕一样大",
+                shots.All(s => s.Image.Width == s.Bounds.Width && s.Image.Height == s.Bounds.Height),
+                string.Join(", ", shots.Select(s => s.Image.Size + " vs " + s.Bounds.Size)));
+            if (shots.Count > 0)
+            {
+                // 截到的内容随机器而定（CI 上可能是一片黑），只存下来看，不判断。
+                using (var small = new Bitmap(shots[0].Image, shots[0].Image.Width / 4, shots[0].Image.Height / 4)) Save(small, Path.Combine(dir, "7-real-capture.png"));
+            }
+            foreach (var s in shots) s.Image.Dispose();
+            var windows = Capturer.VisibleWindowRects();
+            Check("真实窗口列表：能取到，不报错", windows != null, "null");
+            Log.Add("可见窗口数：" + windows.Count);
         }
 
         // MARK: 界面语言（D-12）

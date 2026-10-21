@@ -12,7 +12,7 @@
     <RootNamespace>EZSnap</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>AppIcon.ico</ApplicationIcon>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Product>EZSnap</Product>
     <Description>EZSnap 截图</Description>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
