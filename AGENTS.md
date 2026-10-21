@@ -5,8 +5,7 @@ privacy, verification) come from agent-system's RULE.md and aren't repeated here
 
 ## Commits
 
-- Subjects are short imperative English; bodies are plain English and end with `Why: D-n` when a
-  decision applies. Don't write commit messages in Chinese, even when the conversation is.
+- Commit messages follow agent-system D-72 (English, `Why: D-n`).
 - Commits use `Cheng Yuan` with the GitHub noreply address, set in this repository's local git
   config.
 - The repository is public (D-16). Check every commit for real usernames, home paths and hosts
@@ -14,8 +13,13 @@ privacy, verification) come from agent-system's RULE.md and aren't repeated here
 
 ## Languages
 
+- Text shown on GitHub is English and tracked files keep their own language (agent-system D-72,
+  D-19). In this repository that means:
+  - The Actions page counts too: workflow, job, step and artifact names are English. A run is
+    titled with its commit subject and the title can't be changed afterwards; a run with a wrong
+    title can only be deleted.
+  - `docs/`, `windows/README.md`, code comments, script output and self-test logs stay Chinese.
 - `README.md` is English and `README.zh-CN.md` is Simplified Chinese; change both together (D-13).
-- `docs/`, `windows/README.md` and code comments are Chinese (D-12).
 - Every new UI string is written in English, Simplified and Traditional Chinese:
   `L(en, hans, hant)` on the Mac, `L.T(en, hans, hant)` on Windows (D-12).
 

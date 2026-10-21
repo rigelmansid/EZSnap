@@ -157,3 +157,11 @@
 - 选择：B。用户要求删掉临时文件时一并删了。
 - 理由：用户决定。
 - 影响：Mac 版的自动检查只剩 --selftest（只覆盖绘制和导出）；以前提交说明里的“离屏测试 n 项通过”无法再复现，交互改动要靠真机验证。
+
+### D-19 GitHub 上的展示内容一律用英文，仓库里的文件保持原来的语言（2026-10-21，用户决定）
+
+- 背景：Release 说明是中英双语，Actions 运行记录的标题是改写历史前的中文提交说明。用户说明：CodaPace、meshlink 在 GitHub 上展示的都是英文。
+- 选项：A 只管 GitHub 附带生成的页面，文件不翻译 / B 连 docs/、代码注释等文件一起译成英文
+- 选择：A。提交说明、Release、tag、仓库描述、PR 和 issue、Actions 里的名称都用英文；入库文件保持原来的语言（docs/、windows/README.md、代码注释、脚本输出等仍是中文），README 另有中文版（D-13）。
+- 理由：用户决定；和 CodaPace、meshlink 一致，也和同日加进全局 RULE.md 的 agent-system D-72 一致（本项目只补充 Actions 页面和哪些文件保持中文）。
+- 影响：Release 说明改成纯英文；删掉了 11 条标题是旧提交说明的 Actions 运行，只留 v0.1.1 那次；规则写进 AGENTS.md 的 Languages 一节。
