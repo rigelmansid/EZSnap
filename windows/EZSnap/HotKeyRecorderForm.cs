@@ -10,14 +10,14 @@ namespace EZSnap
     {
         private readonly Shortcut current;
         private readonly Label message = new Label { AutoSize = false };
-        private readonly Button ok = new Button { Text = "确定" };
+        private readonly Button ok = new Button { Text = L.T("OK", "确定", "確定") };
         private readonly Panel box = new Panel();
         public Shortcut? Recorded { get; private set; }
 
         public HotKeyRecorderForm(Shortcut current)
         {
             this.current = current;
-            Text = "自定义截图快捷键";
+            Text = L.T("Custom Capture Shortcut", "自定义截图快捷键", "自訂截圖快速鍵");
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = MinimizeBox = false;
             ShowInTaskbar = true;
@@ -30,12 +30,12 @@ namespace EZSnap
             KeyPreview = true;
             Icon = TrayApp.LoadIcon();
 
-            var prompt = new Label { Text = "按下新的截图快捷键：", Location = new Point(20, 16), AutoSize = true };
+            var prompt = new Label { Text = L.T("Press the new capture shortcut:", "按下新的截图快捷键：", "按下新的截圖快速鍵："), Location = new Point(20, 16), AutoSize = true };
             box.SetBounds(20, 42, 300, 44);
             box.Paint += PaintBox;
             message.SetBounds(20, 92, 300, 32);
             message.Font = new Font(Theme.FontName, 8.25f);
-            var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel };
+            var cancel = new Button { Text = L.T("Cancel", "取消", "取消"), DialogResult = DialogResult.Cancel };
             cancel.SetBounds(146, 128, 84, 28);
             ok.SetBounds(236, 128, 84, 28);
             ok.Click += (s, e) => Confirm();
@@ -87,7 +87,8 @@ namespace EZSnap
             }
             else
             {
-                message.Text = Recorded == null ? "Esc 取消" : "按回车或点“确定”生效";
+                message.Text = Recorded == null ? L.T("Press Esc to cancel", "Esc 取消", "Esc 取消")
+                    : L.T("Press Enter or click OK to apply", "按回车或点“确定”生效", "按 Enter 或點「確定」生效");
                 message.ForeColor = SystemColors.GrayText;
             }
             ok.Enabled = Recorded != null && problem == null;

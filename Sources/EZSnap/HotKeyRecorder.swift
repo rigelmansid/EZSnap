@@ -7,7 +7,7 @@ final class HotKeyRecorder: NSObject, NSWindowDelegate {
                                 styleMask: [.titled, .closable], backing: .buffered, defer: false)
     private let field: RecorderField
     private let message = NSTextField(wrappingLabelWithString: "")
-    private let okButton = NSButton(title: "确定", target: nil, action: nil)
+    private let okButton = NSButton(title: L("OK", "确定", "確定"), target: nil, action: nil)
     private var completion: ((Shortcut?) -> Void)?
     private var monitor: Any?
 
@@ -15,18 +15,18 @@ final class HotKeyRecorder: NSObject, NSWindowDelegate {
         field = RecorderField(current: current)
         self.completion = completion
         super.init()
-        panel.title = "自定义截图快捷键"
+        panel.title = L("Custom Capture Shortcut", "自定义截图快捷键", "自訂截圖快速鍵")
         panel.isReleasedWhenClosed = false
         // 菜单栏应用没有 Dock 图标，窗口被盖住就不好找回来。
         panel.level = .floating
         panel.delegate = self
 
-        let prompt = NSTextField(labelWithString: "按下新的截图快捷键：")
+        let prompt = NSTextField(labelWithString: L("Press the new capture shortcut:", "按下新的截图快捷键：", "按下新的截圖快速鍵："))
         prompt.frame = NSRect(x: 20, y: 122, width: 300, height: 18)
         field.frame = NSRect(x: 20, y: 72, width: 300, height: 42)
         message.frame = NSRect(x: 20, y: 42, width: 300, height: 28)
         message.font = .systemFont(ofSize: 11)
-        let cancelButton = NSButton(title: "取消", target: self, action: #selector(cancel))
+        let cancelButton = NSButton(title: L("Cancel", "取消", "取消"), target: self, action: #selector(cancel))
         cancelButton.frame = NSRect(x: 146, y: 12, width: 84, height: 28)
         okButton.frame = NSRect(x: 236, y: 12, width: 84, height: 28)
         okButton.target = self
@@ -61,7 +61,8 @@ final class HotKeyRecorder: NSObject, NSWindowDelegate {
             message.stringValue = problem
             message.textColor = .systemRed
         } else {
-            message.stringValue = field.recorded == nil ? "Esc 取消" : "按回车或点“确定”生效"
+            message.stringValue = field.recorded == nil ? L("Press Esc to cancel", "Esc 取消", "Esc 取消")
+                : L("Press Return or click OK to apply", "按回车或点“确定”生效", "按 Return 鍵或點「確定」生效")
             message.textColor = .secondaryLabelColor
         }
         okButton.isEnabled = field.recorded != nil && field.recorded?.problem == nil

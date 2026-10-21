@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Self.makeMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let icon = NSImage(systemSymbolName: "scissors", accessibilityDescription: "截图")
+        let icon = NSImage(systemSymbolName: "scissors", accessibilityDescription: L("Capture", "截图", "截圖"))
         icon?.isTemplate = true
         statusItem.button?.image = icon
         HotKey.onPress = { [weak self] in self?.startCapture() }
@@ -67,8 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showWelcome() {
-        showAlert(title: "EZSnap 在菜单栏里运行",
-                  message: "点屏幕右上角的剪刀图标打开菜单；按 \(currentShortcut.title) 开始截图。")
+        showAlert(title: L("EZSnap is running in the menu bar", "EZSnap 在菜单栏里运行", "EZSnap 在選單列中執行"),
+                  message: L("Click the scissors icon at the top right of the screen to open the menu; press \(currentShortcut.title) to capture.",
+                             "点屏幕右上角的剪刀图标打开菜单；按 \(currentShortcut.title) 开始截图。",
+                             "點螢幕右上角的剪刀圖像打開選單；按 \(currentShortcut.title) 開始截圖。"))
     }
 
     // MARK: - 菜单
@@ -83,9 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let shortcut = currentShortcut
 
-        let capture = NSMenuItem(title: "截图", action: #selector(captureFromMenu),
+        let capture = NSMenuItem(title: L("Capture", "截图", "截圖"), action: #selector(captureFromMenu),
                                  keyEquivalent: shortcut.menuKeyEquivalent ?? "")
-        if shortcut.menuKeyEquivalent == nil { capture.title = "截图（\(shortcut.title)）" }
+        if shortcut.menuKeyEquivalent == nil { capture.title = L("Capture (\(shortcut.title))", "截图（\(shortcut.title)）", "截圖（\(shortcut.title)）") }
         capture.keyEquivalentModifierMask = shortcut.modifiers
         capture.target = self
         menu.addItem(capture)
@@ -99,25 +101,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKeyMenu.addItem(item)
         }
         hotKeyMenu.addItem(.separator())
-        let custom = NSMenuItem(title: hotKeyIndex < 0 ? "自定义：\(shortcut.title)…" : "自定义…",
+        let custom = NSMenuItem(title: hotKeyIndex < 0 ? L("Custom: \(shortcut.title)…", "自定义：\(shortcut.title)…", "自訂：\(shortcut.title)…")
+                                                : L("Custom…", "自定义…", "自訂…"),
                                 action: #selector(recordHotKey), keyEquivalent: "")
         custom.target = self
         custom.state = hotKeyIndex < 0 ? .on : .off
         hotKeyMenu.addItem(custom)
-        let hotKeyItem = NSMenuItem(title: hotKeyRegistered ? "快捷键" : "快捷键（注册失败，可能被占用）",
+        let hotKeyItem = NSMenuItem(title: hotKeyRegistered ? L("Shortcut", "快捷键", "快速鍵")
+                                    : L("Shortcut (registration failed, may be in use)", "快捷键（注册失败，可能被占用）", "快速鍵（註冊失敗，可能已被佔用）"),
                                     action: nil, keyEquivalent: "")
         hotKeyItem.submenu = hotKeyMenu
         menu.addItem(hotKeyItem)
 
-        let closePins = NSMenuItem(title: "关闭所有钉图", action: #selector(closeAllPins), keyEquivalent: "")
+        // 语言（D-12）：标题带上英文，看不懂当前语言的人也找得到。
+        let languageMenu = NSMenu()
+        for language in Language.allCases {
+            let item = NSMenuItem(title: language.title, action: #selector(chooseLanguage(_:)), keyEquivalent: "")
+            item.representedObject = language.rawValue
+            item.target = self
+            item.state = L10n.choice == language ? .on : .off
+            languageMenu.addItem(item)
+            if language == .system { languageMenu.addItem(.separator()) }
+        }
+        let languageItem = NSMenuItem(title: L("Language", "语言 / Language", "語言 / Language"), action: nil, keyEquivalent: "")
+        languageItem.submenu = languageMenu
+        menu.addItem(languageItem)
+
+        let closePins = NSMenuItem(title: L("Close All Pins", "关闭所有钉图", "關閉所有釘圖"), action: #selector(closeAllPins), keyEquivalent: "")
         closePins.target = self
         menu.addItem(closePins)
 
         menu.addItem(.separator())
-        let permission = NSMenuItem(title: "屏幕录制权限设置…", action: #selector(openPermissionSettings), keyEquivalent: "")
+        let permission = NSMenuItem(title: L("Screen Recording Permission…", "屏幕录制权限设置…", "螢幕錄製權限設定…"), action: #selector(openPermissionSettings), keyEquivalent: "")
         permission.target = self
         menu.addItem(permission)
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: L("Quit", "退出", "結束"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         statusItem.menu = menu
     }
@@ -135,17 +153,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let main = NSMenu()
         main.addItem(submenu("EZSnap", []))
-        main.addItem(submenu("文件", [
-            NSMenuItem(title: "保存…", action: #selector(NSDocument.save(_:)), keyEquivalent: "s"), // 即 saveDocument:
+        main.addItem(submenu(L("File", "文件", "檔案"), [
+            NSMenuItem(title: L("Save…", "保存…", "儲存…"), action: #selector(NSDocument.save(_:)), keyEquivalent: "s"), // 即 saveDocument:
         ]))
-        main.addItem(submenu("编辑", [
-            NSMenuItem(title: "撤销", action: Selector(("undo:")), keyEquivalent: "z"),
-            NSMenuItem(title: "重做", action: Selector(("redo:")), keyEquivalent: "Z"),
+        main.addItem(submenu(L("Edit", "编辑", "編輯"), [
+            NSMenuItem(title: L("Undo", "撤销", "還原"), action: Selector(("undo:")), keyEquivalent: "z"),
+            NSMenuItem(title: L("Redo", "重做", "重做"), action: Selector(("redo:")), keyEquivalent: "Z"),
             .separator(),
-            NSMenuItem(title: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
-            NSMenuItem(title: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
-            NSMenuItem(title: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
-            NSMenuItem(title: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
+            NSMenuItem(title: L("Cut", "剪切", "剪下"), action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
+            NSMenuItem(title: L("Copy", "拷贝", "拷貝"), action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
+            NSMenuItem(title: L("Paste", "粘贴", "貼上"), action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
+            NSMenuItem(title: L("Select All", "全选", "全選"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
         ]))
         return main
     }
@@ -172,8 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.customShortcut = oldCustom
                 self.hotKeyIndex = oldIndex
                 self.applyHotKey()
-                self.showAlert(title: "快捷键设置失败",
-                               message: "\(shortcut.title) 注册失败，可能被其他程序占用了。仍使用 \(self.currentShortcut.title)。")
+                self.showAlert(title: L("Couldn't Set Shortcut", "快捷键设置失败", "快速鍵設定失敗"),
+                               message: L("\(shortcut.title) couldn't be registered; another app may be using it. Still using \(self.currentShortcut.title).",
+                                          "\(shortcut.title) 注册失败，可能被其他程序占用了。仍使用 \(self.currentShortcut.title)。",
+                                          "\(shortcut.title) 註冊失敗，可能已被其他程式佔用。仍使用 \(self.currentShortcut.title)。"))
             }
         }
         recorder?.show()
@@ -182,6 +202,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func inputSourceChanged() {
         // 预设按字符定义，换了键盘布局键位可能跟着变（D-6）；录制期间不重新注册。
         if recorder == nil { applyHotKey() }
+    }
+
+    @objc private func chooseLanguage(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let language = Language(rawValue: raw) else { return }
+        L10n.choice = language
+        // 立即生效：菜单重建；截图界面、提示框等下次打开时按新语言显示。
+        NSApp.mainMenu = Self.makeMainMenu()
+        rebuildMenu()
     }
 
     @objc private func closeAllPins() {
@@ -220,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.session = session
                 session.begin()
             } catch {
-                self.showAlert(title: "截图失败", message: error.localizedDescription)
+                self.showAlert(title: L("Capture Failed", "截图失败", "截圖失敗"), message: error.localizedDescription)
             }
         }
     }
@@ -244,10 +272,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPermissionAlert() {
         let alert = NSAlert()
-        alert.messageText = "需要屏幕录制权限"
-        alert.informativeText = "请在“系统设置 → 隐私与安全性 → 屏幕与系统录音”中打开 EZSnap，然后退出并重新打开 EZSnap。"
-        alert.addButton(withTitle: "打开系统设置")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L("Screen Recording Permission Needed", "需要屏幕录制权限", "需要螢幕錄製權限")
+        alert.informativeText = L("Turn on EZSnap in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen EZSnap.",
+                                  "请在“系统设置 → 隐私与安全性 → 屏幕与系统录音”中打开 EZSnap，然后退出并重新打开 EZSnap。",
+                                  "請在「系統設定 → 隱私權與安全性 → 螢幕與系統錄音」中開啟 EZSnap，然後結束並重新開啟 EZSnap。")
+        alert.addButton(withTitle: L("Open System Settings", "打开系统设置", "打開系統設定"))
+        alert.addButton(withTitle: L("Cancel", "取消", "取消"))
         NSApp.activate()
         if alert.runModal() == .alertFirstButtonReturn { openPermissionSettings() }
         // 提示框开着时按下的快捷键会排到它关掉以后才处理，这些按键不能再弹一次。

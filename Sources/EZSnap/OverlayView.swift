@@ -199,7 +199,7 @@ final class OverlayView: NSView, NSMenuItemValidation {
         }
         var hint = attrs
         hint[.foregroundColor] = NSColor(white: 0.7, alpha: 1)
-        ("C 复制颜色  ⇧ 切换格式" as NSString).draw(at: CGPoint(x: info.minX + 6, y: info.minY + 36), withAttributes: hint)
+        (L("C copy  ⇧ RGB/HEX", "C 复制颜色  ⇧ 切换格式", "C 拷貝顏色  ⇧ 切換格式") as NSString).draw(at: CGPoint(x: info.minX + 6, y: info.minY + 36), withAttributes: hint)
     }
 
     // MARK: - 取色

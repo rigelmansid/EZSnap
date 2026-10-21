@@ -23,15 +23,21 @@ namespace EZSnap
             StartPosition = FormStartPosition.Manual;
             AutoScaleMode = AutoScaleMode.None;
             Bounds = bounds;
-            Text = "EZSnap 钉图";
+            Text = L.T("EZSnap Pin", "EZSnap 钉图", "EZSnap 釘圖");
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
 
+            // 每次弹出时按当前语言重建（D-12）。
             var menu = new ContextMenuStrip();
-            menu.Items.Add("复制", null, (s, e) => Copy());
-            menu.Items.Add("另存为…", null, (s, e) => captured.SaveWithDialog(settings));
-            menu.Items.Add("恢复原始大小", null, (s, e) => SetZoom(1));
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("关闭", null, (s, e) => Close());
+            menu.Opening += (s, e) =>
+            {
+                menu.Items.Clear();
+                menu.Items.Add(L.T("Copy", "复制", "複製"), null, (a, b) => Copy());
+                menu.Items.Add(L.T("Save As…", "另存为…", "另存新檔…"), null, (a, b) => captured.SaveWithDialog(settings));
+                menu.Items.Add(L.T("Actual Size", "恢复原始大小", "恢復原始大小"), null, (a, b) => SetZoom(1));
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add(L.T("Close", "关闭", "關閉"), null, (a, b) => Close());
+                e.Cancel = false;
+            };
             ContextMenuStrip = menu;
         }
 

@@ -88,11 +88,11 @@ private final class PinView: NSView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
-        menu.addItem(withTitle: "复制", action: #selector(copyImage), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "另存为…", action: #selector(saveImage), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "恢复原始大小", action: #selector(resetZoom), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("Copy", "复制", "拷貝"), action: #selector(copyImage), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("Save As…", "另存为…", "另存新檔…"), action: #selector(saveImage), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("Actual Size", "恢复原始大小", "恢復原始大小"), action: #selector(resetZoom), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "关闭", action: #selector(closePin), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("Close", "关闭", "關閉"), action: #selector(closePin), keyEquivalent: "").target = self
         return menu
     }
 

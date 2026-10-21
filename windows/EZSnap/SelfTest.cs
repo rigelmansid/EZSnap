@@ -22,11 +22,14 @@ namespace EZSnap
         public static int Run(string dir)
         {
             Directory.CreateDirectory(dir);
+            // 固定用简体中文，输出不随系统语言变；语言本身在 Languages() 里单独检查。
+            L.Choice = Language.ZhHans;
             try
             {
                 SingleScreen(dir);
                 CrossScreen(dir);
                 Shortcuts();
+                Languages();
             }
             catch (Exception e)
             {
@@ -169,6 +172,33 @@ namespace EZSnap
             Check("自定义快捷键存了能读回来", Shortcut.Parse(custom.Serialize()) == custom && custom.Title == "Ctrl+Shift+5", custom.Title);
             var name = CapturedImage.DefaultFileName(new DateTime(2026, 10, 21, 9, 5, 7));
             Check("默认文件名：截图 2026-10-21 09.05.07.png（公历、阿拉伯数字）", name == "截图 2026-10-21 09.05.07.png", name);
+        }
+
+        // MARK: 界面语言（D-12）
+
+        private static void Languages()
+        {
+            foreach (var (culture, expected) in new[] { ("zh-CN", Language.ZhHans), ("zh-Hans", Language.ZhHans), ("zh-TW", Language.ZhHant),
+                                                         ("zh-HK", Language.ZhHant), ("zh-Hant", Language.ZhHant), ("en-US", Language.En), ("ja-JP", Language.En) })
+                Check($"系统语言 {culture} → {expected}", L.FromCulture(culture) == expected, L.FromCulture(culture).ToString());
+            var time = new DateTime(2026, 10, 21, 9, 5, 7);
+            var names = new List<string>();
+            var space = new Shortcut(Keys.Space, Mods.Alt);
+            foreach (var language in new[] { Language.En, Language.ZhHans, Language.ZhHant })
+            {
+                L.Choice = language;
+                names.Add(CapturedImage.DefaultFileName(time));
+                names.Add(space.Title);
+                using (var form = new HotKeyRecorderForm(Shortcut.Presets[0])) names.Add(form.Text);
+            }
+            L.Choice = Language.ZhHans;
+            Check("默认文件名三种语言", names[0] == "Screenshot 2026-10-21 09.05.07.png" && names[3] == "截图 2026-10-21 09.05.07.png"
+                && names[6] == "截圖 2026-10-21 09.05.07.png", string.Join(" | ", names));
+            Check("按键名跟着语言：Alt+Space / Alt+空格 / Alt+空白鍵", names[1] == "Alt+Space" && names[4] == "Alt+空格" && names[7] == "Alt+空白鍵",
+                string.Join(" | ", names));
+            Check("录制窗口标题三种语言", names[2] == "Custom Capture Shortcut" && names[5] == "自定义截图快捷键" && names[8] == "自訂截圖快速鍵",
+                string.Join(" | ", names));
+            Check("语言菜单里的名字用各自的写法", L.Title(Language.En) == "English" && L.Title(Language.ZhHans) == "简体中文" && L.Title(Language.ZhHant) == "繁體中文");
         }
 
         // MARK: 合成图片

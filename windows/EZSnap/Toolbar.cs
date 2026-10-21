@@ -51,20 +51,20 @@ namespace EZSnap
                 separators.Add(x + 4);
                 x += 9;
             }
-            Add(Kind.Tool, "矩形", Tool.Rect);
-            Add(Kind.Tool, "椭圆", Tool.Ellipse);
-            Add(Kind.Tool, "箭头", Tool.Arrow);
-            Add(Kind.Tool, "画笔", Tool.Pen);
-            Add(Kind.Tool, "文字", Tool.Text);
-            Add(Kind.Tool, "马赛克", Tool.Mosaic);
+            Add(Kind.Tool, L.T("Rectangle", "矩形", "矩形"), Tool.Rect);
+            Add(Kind.Tool, L.T("Ellipse", "椭圆", "橢圓"), Tool.Ellipse);
+            Add(Kind.Tool, L.T("Arrow", "箭头", "箭頭"), Tool.Arrow);
+            Add(Kind.Tool, L.T("Pen", "画笔", "畫筆"), Tool.Pen);
+            Add(Kind.Tool, L.T("Text", "文字", "文字"), Tool.Text);
+            Add(Kind.Tool, L.T("Mosaic", "马赛克", "馬賽克"), Tool.Mosaic);
             Separator();
-            Add(Kind.Undo, "撤销 Ctrl+Z");
+            Add(Kind.Undo, L.T("Undo Ctrl+Z", "撤销 Ctrl+Z", "復原 Ctrl+Z"));
             Separator();
-            Add(Kind.Save, "保存 Ctrl+S");
-            Add(Kind.Pin, "钉在屏幕上");
+            Add(Kind.Save, L.T("Save Ctrl+S", "保存 Ctrl+S", "儲存 Ctrl+S"));
+            Add(Kind.Pin, L.T("Pin to Screen", "钉在屏幕上", "釘在螢幕上"));
             Separator();
-            Add(Kind.Cancel, "退出截图 Esc");
-            Add(Kind.Done, "完成 Enter");
+            Add(Kind.Cancel, L.T("Exit Capture (Esc)", "退出截图 Esc", "結束截圖 Esc"));
+            Add(Kind.Done, L.T("Done (Enter)", "完成 Enter", "完成 Enter"));
             barWidth = x + 4;
         }
 

@@ -37,13 +37,13 @@ namespace EZSnap
         }
 
         /// <summary>默认文件名。固定格式的日期用不变文化，不跟着系统日历变（同 Mac 版）。</summary>
-        public static string DefaultFileName(DateTime time) => "截图 " + time.ToString("yyyy-MM-dd HH.mm.ss", CultureInfo.InvariantCulture) + ".png";
+        public static string DefaultFileName(DateTime time) => L.T("Screenshot ", "截图 ", "截圖 ") + time.ToString("yyyy-MM-dd HH.mm.ss", CultureInfo.InvariantCulture) + ".png";
 
         public void SaveWithDialog(Settings settings)
         {
             using (var dialog = new SaveFileDialog
             {
-                Filter = "PNG 图片|*.png",
+                Filter = L.T("PNG image|*.png", "PNG 图片|*.png", "PNG 圖片|*.png"),
                 FileName = DefaultFileName(DateTime.Now),
                 AddExtension = true,
                 DefaultExt = "png",
@@ -60,7 +60,7 @@ namespace EZSnap
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ExternalException)
                 {
-                    MessageBox.Show(e.Message, "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(e.Message, L.T("Save Failed", "保存失败", "儲存失敗"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
         }

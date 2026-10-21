@@ -50,8 +50,8 @@ namespace EZSnap
             get
             {
                 if (IsFunctionKey(Key)) return null;
-                if ((Mods & (Mods.Control | Mods.Alt | Mods.Win)) == 0) return "要带 Ctrl、Alt、Win 中的至少一个（F1–F24 可以单独用）";
-                if (Mods == Mods.Control) return "只带 Ctrl 会抢走各个程序自己的快捷键（如 Ctrl+C），请再加一个修饰键";
+                if ((Mods & (Mods.Control | Mods.Alt | Mods.Win)) == 0) return L.T("Include at least one of Ctrl, Alt, Win (F1–F24 can be used alone)", "要带 Ctrl、Alt、Win 中的至少一个（F1–F24 可以单独用）", "要包含 Ctrl、Alt、Win 其中至少一個（F1–F24 可單獨使用）");
+                if (Mods == Mods.Control) return L.T("Ctrl alone would take over other programs' shortcuts (like Ctrl+C); add another modifier", "只带 Ctrl 会抢走各个程序自己的快捷键（如 Ctrl+C），请再加一个修饰键", "只用 Ctrl 會搶走各個程式自己的快速鍵（如 Ctrl+C），請再加一個修飾鍵");
                 return null;
             }
         }
@@ -60,11 +60,11 @@ namespace EZSnap
         {
             if (k >= Keys.A && k <= Keys.Z) return k.ToString();
             if (k >= Keys.D0 && k <= Keys.D9) return ((int)(k - Keys.D0)).ToString();
-            if (k >= Keys.NumPad0 && k <= Keys.NumPad9) return "小键盘" + (int)(k - Keys.NumPad0);
+            if (k >= Keys.NumPad0 && k <= Keys.NumPad9) return L.T("Num ", "小键盘", "數字鍵盤") + (int)(k - Keys.NumPad0);
             if (IsFunctionKey(k)) return k.ToString();
             switch (k)
             {
-                case Keys.Space: return "空格";
+                case Keys.Space: return L.T("Space", "空格", "空白鍵");
                 case Keys.Return: return "Enter";
                 case Keys.Tab: return "Tab";
                 case Keys.Back: return "Backspace";

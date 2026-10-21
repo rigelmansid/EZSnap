@@ -74,9 +74,11 @@ struct Shortcut: Equatable {
     var problem: String? {
         if KeyLayout.functionKeys.contains(keyCode) { return nil }
         if modifiers.intersection([.control, .option, .command]).isEmpty {
-            return "要带 ⌘、⌃、⌥ 中的至少一个（F1–F20 可以单独用）"
+            return L("Include at least one of ⌘, ⌃, ⌥ (F1–F20 can be used alone)", "要带 ⌘、⌃、⌥ 中的至少一个（F1–F20 可以单独用）",
+                     "要包含 ⌘、⌃、⌥ 其中至少一個（F1–F20 可單獨使用）")
         }
-        if modifiers == .command { return "只带 ⌘ 会抢走各个应用自己的快捷键（如 ⌘C），请再加一个修饰键" }
+        if modifiers == .command { return L("⌘ alone would take over other apps' shortcuts (like ⌘C); add another modifier",
+                                             "只带 ⌘ 会抢走各个应用自己的快捷键（如 ⌘C），请再加一个修饰键", "只用 ⌘ 會搶走各個 App 自己的快速鍵（如 ⌘C），請再加一個修飾鍵") }
         return nil
     }
 
@@ -107,8 +109,9 @@ enum KeyLayout {
     /// 按键的显示名：F 键写成 F1，特殊键用符号，其余按布局取字符并大写。
     static func name(for keyCode: UInt32, layout: TISInputSource? = nil) -> String {
         if let n = functionKeys.firstIndex(of: keyCode) { return "F\(n + 1)" }
+        if keyCode == UInt32(kVK_Space) { return L("Space", "空格", "空白鍵") }
         if let s = specialNames[keyCode] { return s }
-        return character(for: keyCode, layout: layout)?.uppercased() ?? "键\(keyCode)"
+        return character(for: keyCode, layout: layout)?.uppercased() ?? L("Key \(keyCode)", "键\(keyCode)", "鍵\(keyCode)")
     }
 
     /// 按这个键打出的字符。打不出可见的拉丁字符时（俄文等布局）退回 ⌘ 层，和菜单快捷键的认法一致。

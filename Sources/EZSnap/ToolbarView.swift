@@ -42,12 +42,12 @@ final class ToolbarView: NSView {
         }
 
         let tools: [(Tool, String, String)] = [
-            (.rect, "square", "矩形"),
-            (.ellipse, "circle", "椭圆"),
-            (.arrow, "arrow.up.right", "箭头"),
-            (.pen, "scribble", "画笔"),
-            (.text, "textformat", "文字"),
-            (.mosaic, "checkerboard.rectangle", "马赛克"),
+            (.rect, "square", L("Rectangle", "矩形", "矩形")),
+            (.ellipse, "circle", L("Ellipse", "椭圆", "橢圓")),
+            (.arrow, "arrow.up.right", L("Arrow", "箭头", "箭頭")),
+            (.pen, "scribble", L("Pen", "画笔", "畫筆")),
+            (.text, "textformat", L("Text", "文字", "文字")),
+            (.mosaic, "checkerboard.rectangle", L("Mosaic", "马赛克", "馬賽克")),
         ]
         for (tool, symbol, tip) in tools {
             let button = ToolButton(symbol: symbol, tip: tip) { [weak self] in self?.onTool?(tool) }
@@ -55,15 +55,15 @@ final class ToolbarView: NSView {
             add(button)
         }
         separator()
-        undoButton = ToolButton(symbol: "arrow.uturn.backward", tip: "撤销 ⌘Z") { [weak self] in self?.onUndo?() }
+        undoButton = ToolButton(symbol: "arrow.uturn.backward", tip: L("Undo ⌘Z", "撤销 ⌘Z", "還原 ⌘Z")) { [weak self] in self?.onUndo?() }
         add(undoButton)
         separator()
-        add(ToolButton(symbol: "square.and.arrow.down", tip: "保存 ⌘S") { [weak self] in self?.onSave?() })
-        add(ToolButton(symbol: "pin", tip: "钉在屏幕上") { [weak self] in self?.onPin?() })
+        add(ToolButton(symbol: "square.and.arrow.down", tip: L("Save ⌘S", "保存 ⌘S", "儲存 ⌘S")) { [weak self] in self?.onSave?() })
+        add(ToolButton(symbol: "pin", tip: L("Pin to Screen", "钉在屏幕上", "釘在螢幕上")) { [weak self] in self?.onPin?() })
         separator()
-        add(ToolButton(symbol: "xmark", tip: "退出截图 Esc",
+        add(ToolButton(symbol: "xmark", tip: L("Exit Capture (Esc)", "退出截图 Esc", "結束截圖 Esc"),
                        tint: NSColor(srgbRed: 0.90, green: 0.25, blue: 0.22, alpha: 1)) { [weak self] in self?.onCancel?() })
-        add(ToolButton(symbol: "checkmark", tip: "完成 Enter",
+        add(ToolButton(symbol: "checkmark", tip: L("Done (Return)", "完成 Enter", "完成 Return"),
                        tint: NSColor(srgbRed: 0.16, green: 0.68, blue: 0.30, alpha: 1)) { [weak self] in self?.onDone?() })
         barWidth = x + 4
 

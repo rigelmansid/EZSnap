@@ -32,6 +32,7 @@ namespace EZSnap
                 if (e.Button == MouseButtons.Left)
                     typeof(NotifyIcon).GetMethod("ShowContextMenu", BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(tray, null);
             };
+            L.Choice = L.Parse(settings.Get("language"));
             hotKey.Pressed += StartCapture;
             ApplyHotKey();
 
@@ -91,9 +92,10 @@ namespace EZSnap
         {
             var shortcut = CurrentShortcut;
             var menu = new ContextMenuStrip();
-            menu.Items.Add(new ToolStripMenuItem("截图", null, (s, e) => CaptureFromMenu()) { ShortcutKeyDisplayString = shortcut.Title });
+            menu.Items.Add(new ToolStripMenuItem(L.T("Capture", "截图", "截圖"), null, (s, e) => CaptureFromMenu()) { ShortcutKeyDisplayString = shortcut.Title });
 
-            var hotKeyItem = new ToolStripMenuItem(hotKeyRegistered ? "快捷键" : "快捷键（注册失败，可能被占用）");
+            var hotKeyItem = new ToolStripMenuItem(hotKeyRegistered ? L.T("Shortcut", "快捷键", "快速鍵")
+                : L.T("Shortcut (registration failed, may be in use)", "快捷键（注册失败，可能被占用）", "快速鍵（註冊失敗，可能已被佔用）"));
             for (var i = 0; i < Shortcut.Presets.Length; i++)
             {
                 var index = i;
@@ -103,18 +105,36 @@ namespace EZSnap
                 });
             }
             hotKeyItem.DropDownItems.Add(new ToolStripSeparator());
-            hotKeyItem.DropDownItems.Add(new ToolStripMenuItem(HotKeyIndex < 0 ? $"自定义：{shortcut.Title}…" : "自定义…", null, (s, e) => RecordHotKey())
+            hotKeyItem.DropDownItems.Add(new ToolStripMenuItem(HotKeyIndex < 0 ? L.T($"Custom: {shortcut.Title}…", $"自定义：{shortcut.Title}…", $"自訂：{shortcut.Title}…") : L.T("Custom…", "自定义…", "自訂…"), null, (s, e) => RecordHotKey())
             {
                 Checked = HotKeyIndex < 0,
             });
             menu.Items.Add(hotKeyItem);
-            menu.Items.Add("关闭所有钉图", null, (s, e) => CloseAllPins());
+
+            // 语言（D-12）：标题带上英文，看不懂当前语言的人也找得到。
+            var languageItem = new ToolStripMenuItem(L.T("Language", "语言 / Language", "語言 / Language"));
+            foreach (var language in new[] { Language.System, Language.En, Language.ZhHans, Language.ZhHant })
+            {
+                var chosen = language;
+                languageItem.DropDownItems.Add(new ToolStripMenuItem(L.Title(chosen), null, (s, e) => ChooseLanguage(chosen)) { Checked = L.Choice == chosen });
+                if (chosen == Language.System) languageItem.DropDownItems.Add(new ToolStripSeparator());
+            }
+            menu.Items.Add(languageItem);
+            menu.Items.Add(L.T("Close All Pins", "关闭所有钉图", "關閉所有釘圖"), null, (s, e) => CloseAllPins());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("退出", null, (s, e) => Quit());
+            menu.Items.Add(L.T("Exit", "退出", "結束"), null, (s, e) => Quit());
 
             var old = tray.ContextMenuStrip;
             tray.ContextMenuStrip = menu;
             old?.Dispose();
+        }
+
+        private void ChooseLanguage(Language language)
+        {
+            L.Choice = language;
+            settings.Set("language", L.Key(language));
+            // 菜单立即重建；截图界面、提示等下次打开时按新语言显示。
+            RebuildMenu();
         }
 
         private void ChooseHotKey(int index)
@@ -144,7 +164,10 @@ namespace EZSnap
                         CustomShortcut = oldCustom;
                         HotKeyIndex = oldIndex;
                         ApplyHotKey();
-                        MessageBox.Show($"{shortcut.Title} 注册失败，可能被其他程序占用了。仍使用 {CurrentShortcut.Title}。", "快捷键设置失败",
+                        MessageBox.Show(L.T($"{shortcut.Title} couldn't be registered; another program may be using it. Still using {CurrentShortcut.Title}.",
+                                $"{shortcut.Title} 注册失败，可能被其他程序占用了。仍使用 {CurrentShortcut.Title}。",
+                                $"{shortcut.Title} 註冊失敗，可能已被其他程式佔用。仍使用 {CurrentShortcut.Title}。"),
+                            L.T("Couldn't Set Shortcut", "快捷键设置失败", "快速鍵設定失敗"),
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
                 }
@@ -187,7 +210,7 @@ namespace EZSnap
             catch (Exception e)
             {
                 session = null;
-                MessageBox.Show(e.Message, "截图失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(e.Message, L.T("Capture Failed", "截图失败", "截圖失敗"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -223,8 +246,10 @@ namespace EZSnap
 
         private void ShowWelcome()
         {
-            tray.ShowBalloonTip(6000, "EZSnap 在托盘里运行",
-                $"点右下角托盘里的剪刀图标打开菜单（可能收在 ^ 里）；按 {CurrentShortcut.Title} 开始截图。", ToolTipIcon.Info);
+            tray.ShowBalloonTip(6000, L.T("EZSnap is running in the notification area", "EZSnap 在托盘里运行", "EZSnap 在通知區域中執行"),
+                L.T($"Click the scissors icon in the notification area to open the menu (it may be under ^); press {CurrentShortcut.Title} to capture.",
+                    $"点右下角托盘里的剪刀图标打开菜单（可能收在 ^ 里）；按 {CurrentShortcut.Title} 开始截图。",
+                    $"點右下角通知區域中的剪刀圖示打開選單（可能收在 ^ 裡）；按 {CurrentShortcut.Title} 開始截圖。"), ToolTipIcon.Info);
         }
 
         private void Quit()

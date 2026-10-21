@@ -291,7 +291,7 @@ namespace EZSnap
                     g.DrawRectangle(Pens.White, swatch.X, swatch.Y, swatch.Width, swatch.Height);
                     g.DrawString(session.ColorText(color.Value), mono, Brushes.White, info.X + 21 * DpiScale, info.Y + 19 * DpiScale);
                 }
-                g.DrawString("C 复制颜色  Shift 切换格式", ui, hint, info.X + 6 * DpiScale, info.Y + 36 * DpiScale);
+                g.DrawString(L.T("C copy  Shift RGB/HEX", "C 复制颜色  Shift 切换格式", "C 複製顏色  Shift 切換格式"), ui, hint, info.X + 6 * DpiScale, info.Y + 36 * DpiScale);
             }
         }
 

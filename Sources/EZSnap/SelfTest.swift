@@ -4,6 +4,8 @@ import AppKit
 /// 不截屏、不需要屏幕录制权限，也不覆盖鼠标键盘交互。
 enum SelfTest {
     static func run(outputDir: String) {
+        // 固定用简体中文，输出的图不随系统语言变，能和以前的结果逐字节比较。
+        L10n.forced = .zhHans
         let size = CGSize(width: 800, height: 500)
         let scale: CGFloat = 2
         guard let image = sampleImage(width: Int(size.width * scale), height: Int(size.height * scale)) else {
