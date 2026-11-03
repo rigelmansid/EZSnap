@@ -22,11 +22,12 @@
 | 屏幕录制权限 | 不需要 |
 | 菜单栏 → 语言 / Language | 托盘菜单 → 语言 / Language，同样是跟随系统、English、简体中文、繁體中文 |
 
-悬停识别窗口、拖动框选（可以跨屏）、放大镜取色（`C` 复制颜色，`Shift` 切换格式）、矩形 / 椭圆 / 箭头 / 画笔 / 文字 / 马赛克、撤销、双击或 `Enter` 完成、`Esc` 退出、右键取消、钉图，都和 Mac 版相同。
+悬停识别窗口、拖动框选（可以跨屏）、放大镜取色（`C` 复制颜色，`Shift` 切换格式）、矩形 / 椭圆 / 箭头 / 画笔 / 文字 / 马赛克、画完后选中调整（`Delete` 删除，双击文字重新编辑）、逐步撤销、双击或 `Enter` 完成、`Esc` 退出、右键取消、钉图，都和 Mac 版相同。
 
 和 Mac 版不同的地方：
 
 - 文字输入框是深灰底（WinForms 的输入框不能透明），提交后文字直接画在截图上。
+- 挪动标注时光标是四向箭头（Windows 没有 Mac 那样的手形光标）。
 - 安装程序界面是英文的（Inno Setup 官方没有简体中文语言包）。
 
 ## 构建
@@ -35,7 +36,7 @@
 dotnet build windows/EZSnap/EZSnap.csproj -c Release     # 在 macOS 上也能编译，但只能在 Windows 上运行
 ```
 
-- 自检：`EZSnap.exe --selftest <目录>`，用合成图片渲染界面、检查跨屏拼接等，结果写进 `<目录>\selftest.log`，失败时退出码非 0。不覆盖真实截屏和鼠标键盘交互。
+- 自检：`EZSnap.exe --selftest <目录>`，用合成图片渲染界面、检查跨屏拼接等，结果写进 `<目录>\selftest.log`，失败时退出码非 0。也检查调整标注的逻辑（直接调用会话的方法）。不覆盖真实的鼠标键盘事件和手感。
 - 安装包：Windows 上装 Inno Setup 6，运行 `ISCC windows\installer\EZSnap.iss`，生成到 `windows\dist\`。
 - 图标：`swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico`（在 Mac 上生成）。
 - 推送到 GitHub 后，`.github/workflows/windows.yml` 会在 Windows 机器上自动做以上三步。

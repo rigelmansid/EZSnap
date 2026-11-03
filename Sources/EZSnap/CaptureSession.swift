@@ -18,6 +18,8 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         case moving(CGPoint, CGRect)
         case resizing(Handle, CGRect)
         case drawing
+        /// 调整第 n 个标注：拖控制点或挪动（控制点为 nil），记下按下处、原来的标注和整组标注（撤销用）。
+        case editing(Int, ShapeHandle?, CGPoint, Annotation, [Annotation])
     }
     private enum Finish { case copy, save, pin }
 
@@ -32,7 +34,16 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
     private var drag = Drag.none
     private(set) var selection = CGRect.zero
     private(set) var hoverRect: CGRect?
-    private(set) var annotations: [Annotation] = [] { didSet { updateUndoButton() } }
+    private(set) var annotations: [Annotation] = []
+    /// 每次改动标注前的整组标注，撤销时取回（D-20）。
+    private var history: [[Annotation]] = [] { didSet { updateUndoButton() } }
+    /// 选中的标注（annotations 的下标）：方框、圆形、箭头、文字或画笔（D-20、D-21）。
+    /// 工具条的样式面板跟着显示它的颜色和粗细。
+    private(set) var selectedAnnotation: Int? {
+        didSet { toolbar.panelTool = selectedAnnotation.map { annotations[$0].tool } }
+    }
+    /// 正在重新编辑的文字标注（下标）。编辑期间不画它，由文字框代替（D-21）。
+    private(set) var editingText: Int?
     private(set) var current: Annotation?
     private var tool: Tool?
     private var textField: NSTextField? { didSet { updateUndoButton() } }
@@ -70,7 +81,7 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         toolbar.onPin = { [weak self] in self?.finish(.pin) }
         toolbar.onCancel = { [weak self] in self?.close(.cancelled) }
         toolbar.onDone = { [weak self] in self?.finish(.copy) }
-        toolbar.onStyleChange = { [weak self] in self?.applyStyleToTextField() }
+        toolbar.onStyleChange = { [weak self] in self?.styleChanged() }
     }
 
     func begin() {
@@ -103,11 +114,17 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         switch drag {
         case .resizing: return true
         case .moving, .drawing: return false
+        case .editing(_, let h, _, _, _): return h != nil
         default: return phase != .selected
         }
     }
 
     var handlePoints: [CGPoint] { phase == .selected ? Handle.allCases.map { $0.point(in: selection) } : [] }
+
+    /// 选中的标注；画控制点用。
+    var selectedShape: Annotation? { phase == .selected ? selectedAnnotation.map { annotations[$0] } : nil }
+
+    var shapeHandlePoints: [CGPoint] { selectedShape.map { shapeHandles($0).map(\.point) } ?? [] }
 
     /// 尺寸标签上的像素数，按矩形涉及的屏幕里最高的分辨率算，和导出一致。
     func sizeText(for r: CGRect) -> String {
@@ -156,13 +173,25 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         case .choosing, .dragging:
             drag = .creating(p)
         case .selected:
+            // 双击文字：重新编辑（D-21）。第一下已经选中了它。
+            if clickCount == 2, selection.contains(p), let i = annotationIndex(at: p), annotations[i].tool == .text {
+                editText(i, in: view)
+                return
+            }
             if clickCount == 2, selection.contains(p) {
                 finish(.copy)
                 return
             }
-            if let h = handle(at: p) {
+            if let (i, h) = shapeHandle(at: p) {
+                beginEditing(i, handle: h, at: p)
+            } else if let h = handle(at: p) {
+                selectedAnnotation = nil
                 drag = .resizing(h, selection)
+            } else if selection.contains(p), let i = annotationIndex(at: p) {
+                selectAnnotation(i)
+                beginEditing(i, handle: nil, at: p)
             } else if selection.contains(p), let tool {
+                selectedAnnotation = nil
                 if tool == .text {
                     beginText(at: p, in: view)
                 } else {
@@ -172,9 +201,12 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
             } else if selection.contains(p), annotations.isEmpty {
                 drag = .moving(p, selection)
                 NSCursor.closedHand.set()
+            } else {
+                selectedAnnotation = nil
             }
         }
         layoutToolbar()
+        redraw()
     }
 
     func mouseDragged(to point: CGPoint) {
@@ -200,6 +232,8 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
             selection = h.resize(original, to: p)
         case .drawing:
             current?.extend(to: p)
+        case .editing(let i, let h, let start, let original, _):
+            annotations[i] = edited(original, handle: h, from: start, to: p)
         }
         layoutToolbar()
         redraw()
@@ -216,8 +250,15 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
                 select()
             }
         case .drawing:
-            if let c = current, c.isMeaningful { annotations.append(c) }
+            if let c = current, c.isMeaningful {
+                history.append(annotations)
+                annotations.append(c)
+                // 刚画完的方框、圆形、箭头直接选中，可以马上调整（D-20）。画笔不选中，接着画下一笔（D-21）。
+                if c.isShape { selectedAnnotation = annotations.count - 1 }
+            }
             current = nil
+        case .editing(_, _, _, _, let before):
+            if annotations != before { history.append(before) }
         case .resizing:
             if selection.width < 4 || selection.height < 4 {
                 selection.size = CGSize(width: max(selection.width, 4), height: max(selection.height, 4))
@@ -260,6 +301,7 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         // ⌘C、⌘S、⌘Z 由主菜单分发，见下面的菜单命令。
         if phase == .selected {
             if event.keyCode == 36 || event.keyCode == 76 { finish(.copy) }
+            if event.keyCode == 51 || event.keyCode == 117 { deleteSelectedAnnotation() } // Delete、⌦
         } else if !cmd, key == "c", let color = views.lazy.compactMap({ $0.colorUnderMouse() }).first {
             let pb = NSPasteboard.general
             pb.clearContents()
@@ -295,7 +337,7 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
             return phase == .selected
         case #selector(OverlayView.undo(_:)):
             if let editor = textField?.currentEditor() { return editor.undoManager?.canUndo ?? false }
-            return !annotations.isEmpty
+            return !history.isEmpty
         default:
             return true
         }
@@ -313,10 +355,13 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         textField?.removeFromSuperview()
         textField = nil
         textHost = nil
+        editingText = nil
         phase = .choosing
         drag = .none
         selection = .zero
         annotations = []
+        history = []
+        selectedAnnotation = nil
         current = nil
         tool = nil
         toolbar.selectedTool = nil
@@ -329,14 +374,16 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
 
     private func toggleTool(_ t: Tool) {
         commitText()
+        selectedAnnotation = nil
+        redraw()
         tool = tool == t ? nil : t
         toolbar.selectedTool = tool
         layoutToolbar()
     }
 
-    /// 有标注或正在输入文字时可以撤销；撤销正在输入的文字框会把它整个去掉。
+    /// 有改动记录或正在输入文字时可以撤销；撤销正在输入的文字框会把它整个去掉。
     private func updateUndoButton() {
-        toolbar.canUndo = textField != nil || !annotations.isEmpty
+        toolbar.canUndo = textField != nil || !history.isEmpty
     }
 
     private func undo() {
@@ -345,9 +392,14 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
             textField = nil
             if let host = textHost { host.window?.makeFirstResponder(host) }
             textHost = nil
-        } else if !annotations.isEmpty {
-            annotations.removeLast()
+            // 撤销重新编辑：丢掉改动，原来的文字照旧显示。
+            editingText = nil
+        } else if let previous = history.popLast() {
+            // 撤销的可能是添加、挪动、改大小、改样式或删除，一律换回改动前的整组标注（D-20）。
+            annotations = previous
+            selectedAnnotation = nil
         }
+        layoutToolbar()
         // 撤销完可能又能拖动选区了，光标马上跟着变，不等鼠标再动。
         if let mouse { updateCursor(at: mouse) }
         redraw()
@@ -380,10 +432,115 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         return view.window?.convertToScreen(rectInWindow) ?? rectInWindow
     }
 
+    // MARK: - 调整已画的标注（D-20）
+
+    /// 当前工具下能不能点选这个标注（D-21）：没选工具或选的是方框、圆形、箭头时都能点；
+    /// 文字工具下只能点文字；画笔、马赛克工具下都点不中，点击照常画。
+    private func canSelect(_ a: Annotation) -> Bool {
+        guard a.isEditable else { return false }
+        switch tool {
+        case nil, .rect?, .ellipse?, .arrow?: return true
+        case .text?: return a.tool == .text
+        default: return false
+        }
+    }
+
+    /// 点中的标注，后画的在上面，优先。
+    private func annotationIndex(at p: CGPoint) -> Int? {
+        annotations.indices.last { canSelect(annotations[$0]) && annotations[$0].hitTest(p) }
+    }
+
+    private func shapeHandles(_ a: Annotation) -> [(handle: ShapeHandle, point: CGPoint)] {
+        guard a.isShape, a.points.count > 1 else { return [] }
+        if a.tool == .arrow { return [(.end(0), a.points[0]), (.end(1), a.points[1])] }
+        let r = CGRect(from: a.points[0], to: a.points[1])
+        return Handle.allCases.map { (.box($0), $0.point(in: r)) }
+    }
+
+    /// 选中标注的控制点。比选区的控制点优先：两者重叠时先调整标注。
+    private func shapeHandle(at p: CGPoint) -> (Int, ShapeHandle)? {
+        guard phase == .selected, let i = selectedAnnotation,
+              let hit = shapeHandles(annotations[i]).first(where: { abs($0.point.x - p.x) <= 6 && abs($0.point.y - p.y) <= 6 })
+        else { return nil }
+        return (i, hit.handle)
+    }
+
+    /// 选中标注时，工具条显示它的颜色和粗细，方便直接改。方框、圆形、箭头还会切到它的工具，
+    /// 框里接着画的是同一种（D-20）；文字、画笔不切，否则下一次点击就会新建文字或画新线（D-21）。
+    private func selectAnnotation(_ i: Int) {
+        let a = annotations[i]
+        selectedAnnotation = i
+        if a.isShape {
+            tool = a.tool
+            toolbar.selectedTool = a.tool
+        }
+        if let c = AnnotationStyle.colors.firstIndex(of: a.color) { style.colorIndex = c }
+        let size = a.tool == .text
+            ? AnnotationStyle.fontSizes.firstIndex(of: a.fontSize)
+            : (0..<3).first { AnnotationStyle.width(for: a.tool, sizeIndex: $0) == a.width }
+        if let size { style.sizeIndex = size }
+        toolbar.refreshStyle()
+    }
+
+    /// 重新编辑文字：在原处打开文字框，填上原来的字（D-21）。
+    private func editText(_ i: Int, in view: OverlayView) {
+        selectAnnotation(i)
+        selectedAnnotation = nil
+        editingText = i
+        drag = .none
+        let a = annotations[i]
+        beginText(at: a.points[0], in: view, text: a.text)
+        layoutToolbar()
+        redraw()
+    }
+
+    private func beginEditing(_ i: Int, handle: ShapeHandle?, at p: CGPoint) {
+        drag = .editing(i, handle, p, annotations[i], annotations)
+        if handle == nil { NSCursor.closedHand.set() }
+    }
+
+    private func edited(_ a: Annotation, handle: ShapeHandle?, from start: CGPoint, to p: CGPoint) -> Annotation {
+        var b = a
+        switch handle {
+        case nil:
+            b.points = a.points.map { CGPoint(x: $0.x + p.x - start.x, y: $0.y + p.y - start.y) }
+        case .end(let n)?:
+            b.points[n] = p
+        case .box(let h)?:
+            let r = h.resize(CGRect(from: a.points[0], to: a.points[1]), to: p)
+            b.points = [r.origin, CGPoint(x: r.maxX, y: r.maxY)]
+        }
+        return b
+    }
+
+    private func deleteSelectedAnnotation() {
+        guard let i = selectedAnnotation else { return }
+        history.append(annotations)
+        annotations.remove(at: i)
+        selectedAnnotation = nil
+        layoutToolbar()
+        if let mouse { updateCursor(at: mouse) }
+        redraw()
+    }
+
+    /// 工具条上改了颜色或粗细：改正在输入的文字，或者改选中的标注。
+    func styleChanged() {
+        applyStyleToTextField()
+        guard let i = selectedAnnotation else { return }
+        var a = annotations[i]
+        a.color = style.color
+        if a.tool == .text { a.fontSize = style.fontSize } else { a.width = style.width(for: a.tool) }
+        guard a != annotations[i] else { return }
+        history.append(annotations)
+        annotations[i] = a
+        redraw()
+    }
+
     // MARK: - 文字
 
-    private func beginText(at p: CGPoint, in view: OverlayView) {
-        let field = NSTextField(string: "")
+    /// text 为空时是新建：文字框竖直居中在点击处。否则是重新编辑：p 是原来文字的左上角，文字框放回原处。
+    private func beginText(at p: CGPoint, in view: OverlayView, text: String = "") {
+        let field = NSTextField(string: text)
         field.isBordered = false
         field.isBezeled = false
         field.drawsBackground = false
@@ -395,7 +552,10 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         textHost = view
         applyStyleToTextField()
         let height = field.frame.height
-        field.frame.origin = CGPoint(x: p.x - view.origin.x, y: p.y - view.origin.y - height / 2)
+        field.frame.origin = text.isEmpty
+            ? CGPoint(x: p.x - view.origin.x, y: p.y - view.origin.y - height / 2)
+            // 和 commitText 的换算相反：文字左边有 2 点内边距。
+            : CGPoint(x: p.x - 2 - view.origin.x, y: p.y - view.origin.y)
         if toolbar.superview === view {
             view.addSubview(field, positioned: .below, relativeTo: toolbar)
         } else {
@@ -442,9 +602,25 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         let shift = host?.origin ?? .zero
         let origin = CGPoint(x: field.frame.minX + 2 + shift.x, y: field.frame.minY + shift.y)
         field.removeFromSuperview()
-        if !text.isEmpty {
-            annotations.append(Annotation(tool: .text, color: field.textColor ?? style.color, width: 0,
-                                          points: [origin], text: text, fontSize: field.font?.pointSize ?? style.fontSize))
+        let color = field.textColor ?? style.color, fontSize = field.font?.pointSize ?? style.fontSize
+        if let i = editingText {
+            // 重新编辑（D-21）：文字框没动过，位置沿用原来的，不经过来回换算；字删光了就删掉这个标注。
+            editingText = nil
+            var a = annotations[i]
+            a.text = text
+            a.color = color
+            a.fontSize = fontSize
+            if text.isEmpty {
+                history.append(annotations)
+                annotations.remove(at: i)
+            } else if a != annotations[i] {
+                history.append(annotations)
+                annotations[i] = a
+            }
+        } else if !text.isEmpty {
+            history.append(annotations)
+            annotations.append(Annotation(tool: .text, color: color, width: 0,
+                                          points: [origin], text: text, fontSize: fontSize))
         }
         if let host { host.window?.makeFirstResponder(host) }
         redraw()
@@ -490,8 +666,12 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
             let host = toolbar.superview as? OverlayView
             if let host, toolbar.hitTest(CGPoint(x: p.x - host.origin.x, y: p.y - host.origin.y)) != nil {
                 NSCursor.arrow.set()
+            } else if let (_, h) = shapeHandle(at: p) {
+                h.cursor.set()
             } else if let h = handle(at: p) {
                 h.cursor.set()
+            } else if selection.contains(p), annotationIndex(at: p) != nil {
+                NSCursor.openHand.set()
             } else if selection.contains(p), let tool {
                 (tool == .text ? NSCursor.iBeam : NSCursor.crosshair).set()
             } else if selection.contains(p), annotations.isEmpty {
@@ -591,13 +771,32 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         hoverRect = windowRect(at: p)
     }
 
+    /// 往正在输入的文字框里填字，代替键盘输入。
+    func simulateTyping(_ text: String) { textField?.stringValue = text }
+
     func simulateSelection(_ rect: CGRect, tool: Tool?, annotations: [Annotation]) {
         selection = rect
         phase = .selected
         self.tool = tool
         self.annotations = annotations
+        // 当作逐个画上去的：每个标注一条撤销记录。
+        history = annotations.indices.map { Array(annotations.prefix($0)) }
+        selectedAnnotation = nil
         toolbar.selectedTool = tool
         layoutToolbar()
+    }
+}
+
+/// 标注的控制点：方框、圆形是外接矩形的 8 个点，箭头是两端（D-20）。
+private enum ShapeHandle {
+    case box(Handle)
+    case end(Int)
+
+    var cursor: NSCursor {
+        switch self {
+        case .box(let h): return h.cursor
+        case .end: return .crosshair
+        }
     }
 }
 

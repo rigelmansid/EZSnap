@@ -34,7 +34,7 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
 - **Windows are picked for you.** Hovering highlights the window under the mouse; a single click
   selects all of it, even when it spans two screens.
 - **Annotate before you share.** Rectangles, ellipses, arrows, pen, text and mosaic, drawn directly
-  on the frozen screen, with undo.
+  on the frozen screen. Marks stay adjustable after you draw them, and every change can be undone.
 - **Small and local.** No third-party libraries, no account, no network access. Settings stay on
   your computer.
 
@@ -53,7 +53,11 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
 ### Annotate
 - Rectangle, ellipse, arrow, pen, text and mosaic
 - Three sizes and eight colors
-- Undo the last mark with `⌘Z` / `Ctrl+Z`
+- Rectangles, ellipses and arrows stay adjustable: click a line to select it, then drag to move it,
+  drag its handles to resize it, or press `Delete`
+- Text and pen strokes can be moved too; double-click text to edit it
+- With a mark selected, the size and color buttons change that mark
+- `⌘Z` / `Ctrl+Z` steps back through every change: drawing, moving, resizing, restyling, deleting
 
 ### Finish
 - Copy to the clipboard: double-click the selection, press `Enter`, or `⌘C` / `Ctrl+C`
@@ -137,12 +141,19 @@ block it.
 | Copy the color under the mouse | `C`; `Shift` switches RGB / HEX | Same |
 | Copy and finish | Double-click the selection, `Enter` or `⌘C` | Double-click, `Enter` or `Ctrl+C` |
 | Save as PNG | `⌘S` or the save button | `Ctrl+S` or the save button |
-| Undo the last mark | `⌘Z` | `Ctrl+Z` |
+| Select a drawn mark | Click its line, or the text | Same |
+| Move / resize a mark | Drag it / drag its handles | Same |
+| Edit text | Double-click it | Same |
+| Delete the selected mark | `Delete` | Same |
+| Undo | `⌘Z` | `Ctrl+Z` |
 | Pin to the screen | Pin button | Same |
 | Cancel the selection | Right-click | Same |
 | Quit the capture | `Esc` (or right-click with no selection) | Same |
 | Change the shortcut | Menu bar → Shortcut → a preset or Custom… | Tray menu → Shortcut |
 | Change the language | Menu bar → Language | Tray menu → Language |
+
+With the pen or mosaic tool on, clicks always draw; turn the tool off to select a mark. Mosaic can't be
+moved once drawn.
 
 In the text tool, `⌘X` `⌘C` `⌘V` `⌘A` `⌘Z` (the `Ctrl` versions on Windows) edit the text as
 usual; `Enter` or `Esc` ends typing.

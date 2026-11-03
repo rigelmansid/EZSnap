@@ -104,7 +104,10 @@ final class OverlayView: NSView, NSMenuItemValidation {
             let shift = NSAffineTransform()
             shift.translateX(by: -origin.x, yBy: -origin.y)
             shift.concat()
-            for a in session.annotations { a.draw(mosaic: a.tool == .mosaic ? mosaicImage : nil, canvas: globalFrame) }
+            // 正在重新编辑的文字由文字框代替，不画（D-21）。
+            for (i, a) in session.annotations.enumerated() where i != session.editingText {
+                a.draw(mosaic: a.tool == .mosaic ? mosaicImage : nil, canvas: globalFrame)
+            }
             if let c = session.current { c.draw(mosaic: c.tool == .mosaic ? mosaicImage : nil, canvas: globalFrame) }
             NSGraphicsContext.restoreGraphicsState()
         }
@@ -121,6 +124,7 @@ final class OverlayView: NSView, NSMenuItemValidation {
             }
         }
         if session.phase == .selected { drawHandles(session.handlePoints) }
+        if let shape = session.selectedShape { drawShapeSelection(shape, handles: session.shapeHandlePoints) }
         if let mouse, session.showsMagnifier { drawMagnifier(at: mouse) }
     }
 
@@ -128,6 +132,26 @@ final class OverlayView: NSView, NSMenuItemValidation {
         Theme.accent.setFill()
         for p in points {
             CGRect(x: p.x - origin.x - 3, y: p.y - origin.y - 3, width: 6, height: 6).fill()
+        }
+    }
+
+    /// 选中的标注（D-20、D-21）：白底蓝边的控制点，和选区的实心控制点区分开；圆形、文字、画笔另画一圈虚线外框。
+    private func drawShapeSelection(_ shape: Annotation, handles: [CGPoint]) {
+        if let rect = shape.selectionBox {
+            let box = NSBezierPath(rect: local(rect))
+            box.lineWidth = 1
+            box.setLineDash([4, 3], count: 2, phase: 0)
+            Theme.accent.setStroke()
+            box.stroke()
+        }
+        for p in handles {
+            let r = CGRect(x: p.x - origin.x - 4, y: p.y - origin.y - 4, width: 8, height: 8)
+            NSColor.white.setFill()
+            r.fill()
+            Theme.accent.setStroke()
+            let border = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
+            border.lineWidth = 1
+            border.stroke()
         }
     }
 

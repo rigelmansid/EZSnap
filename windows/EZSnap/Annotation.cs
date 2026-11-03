@@ -30,8 +30,12 @@ namespace EZSnap
 
         public Color Color => Colors[ColorIndex];
         /// <summary>字号，单位是 96 DPI 下的像素，用时乘以屏幕缩放。</summary>
-        public float FontSize => new float[] { 14, 18, 26 }[SizeIndex];
-        public float Width(Tool tool) => tool == Tool.Mosaic ? new float[] { 12, 22, 34 }[SizeIndex] : new float[] { 2, 4, 6 }[SizeIndex];
+        public float FontSize => FontSizes[SizeIndex];
+        public float Width(Tool tool) => WidthFor(tool, SizeIndex);
+
+        public static readonly float[] FontSizes = { 14, 18, 26 };
+        public static float WidthFor(Tool tool, int sizeIndex) =>
+            tool == Tool.Mosaic ? new float[] { 12, 22, 34 }[sizeIndex] : new float[] { 2, 4, 6 }[sizeIndex];
     }
 
     /// <summary>一块屏幕的马赛克底图：整屏缩小后的图，画的时候放大铺满这块屏幕。</summary>
@@ -76,6 +80,116 @@ namespace EZSnap
                     default: return Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y)) > 3;
                 }
             }
+        }
+
+        /// <summary>有控制点、能拉伸的标注：矩形、椭圆、箭头（同 Mac 版 D-20）。</summary>
+        public bool IsShape => Tool == Tool.Rect || Tool == Tool.Ellipse || Tool == Tool.Arrow;
+
+        /// <summary>画完后还能选中挪动的标注：矩形、椭圆、箭头，加上文字和画笔（D-21）。马赛克不行。</summary>
+        public bool IsEditable => IsShape || Tool == Tool.Text || Tool == Tool.Pen;
+
+        /// <summary>深拷贝。撤销记录存的是拷贝，之后改动标注不会改到记录里（D-20）。</summary>
+        public Annotation Clone() => new Annotation
+        {
+            Tool = Tool, Color = Color, Width = Width, Points = new List<PointF>(Points), Text = Text, FontSize = FontSize, Scale = Scale,
+        };
+
+        public bool SameAs(Annotation o) =>
+            o != null && Tool == o.Tool && Color.ToArgb() == o.Color.ToArgb() && Width == o.Width && Text == o.Text
+            && FontSize == o.FontSize && Scale == o.Scale && Points.SequenceEqual(o.Points);
+
+        private static readonly Bitmap MeasureImage = new Bitmap(1, 1);
+
+        /// <summary>文字占的范围，左上角是 Points[0]，和 Draw 里的画法一致。</summary>
+        public RectangleF TextBounds
+        {
+            get
+            {
+                var origin = Points.Count > 0 ? Points[0] : PointF.Empty;
+                using (var g = Graphics.FromImage(MeasureImage))
+                using (var font = new Font(Theme.FontName, FontSize, FontStyle.Regular, GraphicsUnit.Pixel))
+                {
+                    g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+                    return new RectangleF(origin, g.MeasureString(Text, font, PointF.Empty, StringFormat.GenericTypographic));
+                }
+            }
+        }
+
+        /// <summary>选中时画的虚线外框：椭圆是外接矩形，文字、画笔是外围留一点空的范围。矩形、箭头不画。</summary>
+        public RectangleF? SelectionBox
+        {
+            get
+            {
+                var pad = 3 * Scale;
+                switch (Tool)
+                {
+                    case Tool.Ellipse when Points.Count > 1:
+                        return RectFrom(Points[0], Points[1]);
+                    case Tool.Text:
+                        var t = TextBounds;
+                        t.Inflate(pad, pad);
+                        return t;
+                    case Tool.Pen when Points.Count > 0:
+                        var box = RectangleF.FromLTRB(Points.Min(q => q.X), Points.Min(q => q.Y), Points.Max(q => q.X), Points.Max(q => q.Y));
+                        box.Inflate(Width / 2 + pad, Width / 2 + pad);
+                        return box;
+                    default:
+                        return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 点在线条上（线宽两侧各加 tolerance）算点中。矩形、椭圆只认线条，框里的空白处可以接着画新的（D-20）；
+        /// 文字点在字的范围里就算（D-21）。按几何距离算，不用 GraphicsPath.Widen：退化成一条线的矩形会让它抛异常。
+        /// </summary>
+        public bool HitTest(PointF p, float tolerance)
+        {
+            if (!IsEditable || Points.Count == 0) return false;
+            if (Tool == Tool.Text)
+            {
+                var t = TextBounds;
+                t.Inflate(tolerance / 2, tolerance / 2);
+                return t.Contains(p);
+            }
+            if (Points.Count < 2) return false;
+            var reach = Width / 2 + tolerance;
+            switch (Tool)
+            {
+                case Tool.Rect:
+                    var r = RectFrom(Points[0], Points[1]);
+                    var outer = RectangleF.Inflate(r, reach, reach);
+                    var inner = RectangleF.Inflate(r, -reach, -reach);
+                    return outer.Contains(p) && !(inner.Width > 0 && inner.Height > 0 && inner.Contains(p));
+                case Tool.Ellipse:
+                    return NearPolyline(EllipsePoints(RectFrom(Points[0], Points[1])), p, reach);
+                case Tool.Pen:
+                    return NearPolyline(Points, p, reach);
+                default:
+                    return NearPolyline(new List<PointF> { Points[0], Points[1] }, p, reach);
+            }
+        }
+
+        private static List<PointF> EllipsePoints(RectangleF r)
+        {
+            float cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2;
+            return Enumerable.Range(0, 97).Select(i => i * Math.PI * 2 / 96)
+                .Select(t => new PointF(cx + r.Width / 2 * (float)Math.Cos(t), cy + r.Height / 2 * (float)Math.Sin(t))).ToList();
+        }
+
+        private static bool NearPolyline(List<PointF> points, PointF p, float reach)
+        {
+            for (var i = 0; i + 1 < points.Count; i++)
+                if (DistanceToSegment(p, points[i], points[i + 1]) <= reach) return true;
+            return false;
+        }
+
+        private static double DistanceToSegment(PointF p, PointF a, PointF b)
+        {
+            double dx = b.X - a.X, dy = b.Y - a.Y, len2 = dx * dx + dy * dy;
+            var t = len2 == 0 ? 0 : Math.Max(0, Math.Min(1, ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / len2));
+            double x = a.X + t * dx - p.X, y = a.Y + t * dy - p.Y;
+            return Math.Sqrt(x * x + y * y);
         }
 
         public static RectangleF RectFrom(PointF a, PointF b) =>

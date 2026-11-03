@@ -11,8 +11,9 @@ using System.Windows.Forms;
 namespace EZSnap
 {
     /// <summary>
-    /// 自检：不截屏，用合成图片驱动截图会话，把界面和导出结果写成 PNG，并检查跨屏拼接、窗口选择、快捷键等逻辑。
-    /// 结果写进 selftest.log；有失败时返回 1。不覆盖真实的截屏、全局快捷键和鼠标键盘交互。
+    /// 自检：不截屏，用合成图片驱动截图会话，把界面和导出结果写成 PNG，并检查跨屏拼接、窗口选择、快捷键、
+    /// 调整已画的标注（D-20、D-21）等逻辑。直接调用会话的方法，不经过真实的鼠标键盘事件。
+    /// 结果写进 selftest.log；有失败时返回 1。不覆盖真实的全局快捷键和手感。
     /// </summary>
     internal static class SelfTest
     {
@@ -27,6 +28,8 @@ namespace EZSnap
             try
             {
                 SingleScreen(dir);
+                EditShapes(dir);
+                EditTextAndPen(dir);
                 CrossScreen(dir);
                 Shortcuts();
                 Languages();
@@ -98,6 +101,161 @@ namespace EZSnap
             // 10.3→10、20.6→21，宽 11；按“起点、宽度分别取整”会得到 10。
             Check("小数坐标的选区按四条边取整", CaptureSession.PixelRect(new RectangleF(10.3f, 10.3f, 10.3f, 10.3f)).Width == 11,
                 CaptureSession.PixelRect(new RectangleF(10.3f, 10.3f, 10.3f, 10.3f)).ToString());
+        }
+
+        // MARK: 调整已画的标注（D-20、D-21），和 Mac 版自检同样的步骤
+
+        private static PointF P(float x, float y) => new PointF(x, y);
+
+        private static List<Annotation> Copy(List<Annotation> list) => list.Select(a => a.Clone()).ToList();
+
+        private static bool Same(List<Annotation> a, List<Annotation> b) => a.Count == b.Count && a.Zip(b, (x, y) => x.SameAs(y)).All(ok => ok);
+
+        private static string Describe(List<Annotation> list) =>
+            string.Join("; ", list.Select(a => a.Tool + " " + string.Join(" ", a.Points.Take(2).Select(q => $"({q.X},{q.Y})"))));
+
+        private static void Drag(CaptureSession s, PointF a, PointF b)
+        {
+            s.MouseDown(a, 1, s.Forms[0]);
+            s.MouseDragged(b);
+            s.MouseUp(b);
+        }
+
+        private static ScreenShot EditShot() => new ScreenShot { Bounds = new Rectangle(0, 0, 800, 500), Image = SampleImage(800, 500), Scale = 1 };
+
+        private static void EditShapes(string dir)
+        {
+            var colors = AnnotationStyle.Colors;
+            var original = new List<Annotation>
+            {
+                new Annotation { Tool = Tool.Rect, Color = colors[0], Width = 4, Points = { P(120, 100), P(260, 180) } },
+                new Annotation { Tool = Tool.Ellipse, Color = colors[3], Width = 4, Points = { P(300, 100), P(420, 180) } },
+                new Annotation { Tool = Tool.Arrow, Color = colors[0], Width = 4, Points = { P(460, 320), P(540, 220) } },
+            };
+            var s = new CaptureSession(new List<ScreenShot> { EditShot() }, new List<Rectangle>());
+            s.SimulateSelection(new RectangleF(100, 80, 480, 280), null, Copy(original));
+            var all = s.Annotations;
+
+            Drag(s, P(120, 140), P(150, 160));
+            Check("拖矩形的线条：选中并挪动", all[0].Points.SequenceEqual(new[] { P(150, 120), P(290, 200) }) && s.SelectedAnnotation == 0, Describe(all));
+            var moved = Copy(all);
+            Drag(s, P(290, 200), P(320, 230));
+            Check("拖矩形右下角的控制点：改大小", all[0].Points.SequenceEqual(new[] { P(150, 120), P(320, 230) }), Describe(all));
+            var resized = Copy(all);
+            Drag(s, P(360, 140), P(360, 140));
+            Check("没选工具时点椭圆框内空白处：取消选中，不改标注", s.SelectedAnnotation == null && Same(all, resized), Describe(all));
+            Drag(s, P(300, 140), P(300, 140));
+            Check("点椭圆的线条：选中，不改标注", s.SelectedAnnotation == 1 && Same(all, resized), s.SelectedAnnotation + " " + Describe(all));
+            Drag(s, P(340, 125), P(380, 155));
+            Check("选中椭圆后在框内空白处拖：画新椭圆并选中，原来的不变",
+                all.Count == 4 && all[1].SameAs(resized[1]) && all[3].Tool == Tool.Ellipse && s.SelectedAnnotation == 3, Describe(all));
+            using (var image = Render(s.Forms[0])) Save(image, Path.Combine(dir, "8-edit.png"));
+            var drawn = Copy(all);
+            Drag(s, P(500, 270), P(500, 270));
+            Check("点箭头中段：选中箭头", s.SelectedAnnotation == 2, s.SelectedAnnotation.ToString());
+            Drag(s, P(540, 220), P(560, 200));
+            Check("拖箭头终点", all[2].Points.SequenceEqual(new[] { P(460, 320), P(560, 200) }), Describe(all));
+            var arrowMoved = Copy(all);
+            AnnotationStyle.Shared.ColorIndex = 2;
+            AnnotationStyle.Shared.SizeIndex = 2;
+            s.ApplyStyle();
+            Check("工具条改颜色和粗细：改到选中的箭头上", all[2].Color.ToArgb() == colors[2].ToArgb() && all[2].Width == 6, all[2].Color + " " + all[2].Width);
+            var styled = Copy(all);
+            s.HandleKey(Keys.Delete);
+            Check("按 Delete：删掉选中的箭头", all.Count == 3 && all.All(a => a.Tool != Tool.Arrow) && s.SelectedAnnotation == null, Describe(all));
+
+            var steps = new (List<Annotation>, string)[]
+            {
+                (styled, "删除"), (arrowMoved, "改样式"), (drawn, "拖箭头终点"), (resized, "画新椭圆"), (moved, "改大小"), (original, "挪动"),
+                (original.Take(2).ToList(), "画箭头"), (original.Take(1).ToList(), "画椭圆"), (new List<Annotation>(), "画矩形"),
+            };
+            foreach (var (expected, name) in steps)
+            {
+                s.HandleKey(Keys.Control | Keys.Z);
+                Check("撤销" + name, Same(all, expected), Describe(all));
+            }
+            Check("全部撤销后不能再撤销", !s.CanUndo);
+        }
+
+        private static void EditTextAndPen(string dir)
+        {
+            var colors = AnnotationStyle.Colors;
+            var style = AnnotationStyle.Shared;
+            var text = new Annotation { Tool = Tool.Text, Color = colors[0], Width = 0, Points = { P(150, 250) }, Text = "文字 Text", FontSize = 18 };
+            var pen = new Annotation { Tool = Tool.Pen, Color = colors[2], Width = 4, Points = { P(200, 320), P(250, 330), P(300, 320), P(350, 330), P(400, 320) } };
+            var original = new List<Annotation> { text, pen };
+            var region = new RectangleF(100, 80, 480, 280);
+            var s = new CaptureSession(new List<ScreenShot> { EditShot() }, new List<Rectangle>());
+            s.SimulateSelection(region, null, Copy(original));
+            var all = s.Annotations;
+            void DoubleClick(PointF p)
+            {
+                s.MouseDown(p, 1, s.Forms[0]);
+                s.MouseUp(p);
+                s.MouseDown(p, 2, s.Forms[0]);
+                s.MouseUp(p);
+            }
+            void ClickOutside()
+            {
+                s.MouseDown(P(520, 120), 1, s.Forms[0]);
+                s.MouseUp(P(520, 120));
+            }
+            TextBox Box() => s.Forms[0].Controls.OfType<TextBox>().FirstOrDefault();
+
+            Drag(s, P(170, 260), P(190, 270));
+            Check("拖文字：选中并挪动", all[0].Points.SequenceEqual(new[] { P(170, 260) }) && s.SelectedAnnotation == 0, Describe(all));
+            var textMoved = Copy(all);
+            Drag(s, P(300, 320), P(300, 300));
+            Check("拖画笔线条：选中并挪动", all[1].Points.SequenceEqual(pen.Points.Select(q => P(q.X, q.Y - 20))) && s.SelectedAnnotation == 1, Describe(all));
+            var penMoved = Copy(all);
+            style.ColorIndex = 3;
+            style.SizeIndex = 2;
+            s.ApplyStyle();
+            Check("工具条改样式：改到选中的线条上", all[1].Color.ToArgb() == colors[3].ToArgb() && all[1].Width == 6, all[1].Color + " " + all[1].Width);
+            using (var image = Render(s.Forms[0])) Save(image, Path.Combine(dir, "9-text-pen.png"));
+            var penStyled = Copy(all);
+            Drag(s, P(180, 272), P(180, 272));
+            Check("点文字：选中，工具条显示它的颜色和字号", s.SelectedAnnotation == 0 && style.ColorIndex == 0 && style.SizeIndex == 1,
+                $"{s.SelectedAnnotation} {style.ColorIndex} {style.SizeIndex}");
+            style.ColorIndex = 4;
+            style.SizeIndex = 2;
+            s.ApplyStyle();
+            Check("工具条改样式：改文字的颜色和字号", all[0].Color.ToArgb() == colors[4].ToArgb() && all[0].FontSize == 26, all[0].Color + " " + all[0].FontSize);
+            var textStyled = Copy(all);
+            DoubleClick(P(180, 272));
+            Check("双击文字：进入重新编辑", s.EditingText == 0 && Box()?.Text == "文字 Text" && Same(all, textStyled), Box()?.Text ?? "没有输入框");
+            ClickOutside();
+            Check("不改内容就结束编辑：文字原样，位置不变", s.EditingText == null && Same(all, textStyled), Describe(all));
+            DoubleClick(P(180, 272));
+            if (Box() != null) Box().Text = "改过的文字";
+            ClickOutside();
+            Check("改字后结束编辑：内容更新，位置和样式不变", all[0].Text == "改过的文字" && all[0].Points.SequenceEqual(new[] { P(170, 260) })
+                && all[0].Color.ToArgb() == colors[4].ToArgb() && all[0].FontSize == 26, all[0].Text + " " + Describe(all));
+            var edited = Copy(all);
+            DoubleClick(P(180, 272));
+            if (Box() != null) Box().Text = "";
+            ClickOutside();
+            Check("把字删光再结束编辑：删掉这个文字", all.Count == 1 && all[0].SameAs(penStyled[1]), Describe(all));
+
+            var steps = new (List<Annotation>, string)[]
+            {
+                (edited, "删光文字"), (textStyled, "改文字内容"), (penStyled, "改文字样式"), (penMoved, "改线条样式"),
+                (textMoved, "挪线条"), (original, "挪文字"), (new List<Annotation> { text }, "画线条"), (new List<Annotation>(), "写文字"),
+            };
+            foreach (var (expected, name) in steps)
+            {
+                s.HandleKey(Keys.Control | Keys.Z);
+                Check("撤销" + name, Same(all, expected), Describe(all));
+            }
+
+            var penTool = new CaptureSession(new List<ScreenShot> { EditShot() }, new List<Rectangle>());
+            penTool.SimulateSelection(region, Tool.Pen, new[] { pen.Clone() });
+            Drag(penTool, P(300, 320), P(320, 340));
+            Check("画笔工具开着时在旧线条上拖：画新线条，旧的不动",
+                penTool.Annotations.Count == 2 && penTool.Annotations[0].SameAs(pen) && penTool.SelectedAnnotation == null, Describe(penTool.Annotations));
+            // 样式是全局共用的，恢复默认，免得影响后面的检查。
+            style.ColorIndex = 0;
+            style.SizeIndex = 1;
         }
 
         // MARK: 跨屏：A 在左（蓝），B 在右边偏下（红），两屏之间右上方有一块空隙

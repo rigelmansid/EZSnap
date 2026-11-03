@@ -27,15 +27,19 @@ final class AnnotationStyle {
     var sizeIndex = 1
 
     var color: NSColor { Self.colors[colorIndex] }
-    var fontSize: CGFloat { [14, 18, 26][sizeIndex] }
+    var fontSize: CGFloat { Self.fontSizes[sizeIndex] }
 
-    func width(for tool: Tool) -> CGFloat {
+    static let fontSizes: [CGFloat] = [14, 18, 26]
+
+    func width(for tool: Tool) -> CGFloat { Self.width(for: tool, sizeIndex: sizeIndex) }
+
+    static func width(for tool: Tool, sizeIndex: Int) -> CGFloat {
         tool == .mosaic ? [12, 22, 34][sizeIndex] : [2, 4, 6][sizeIndex]
     }
 }
 
 /// 一个标注。坐标是遮罩视图的坐标（左上角原点，单位为点）。
-struct Annotation {
+struct Annotation: Equatable {
     var tool: Tool
     var color: NSColor
     var width: CGFloat
@@ -51,6 +55,47 @@ struct Annotation {
         default:
             if points.count > 1 { points[1] = p } else { points.append(p) }
         }
+    }
+
+    /// 有控制点、能拉伸的标注：方框、圆形、箭头（D-20）。
+    var isShape: Bool { tool == .rect || tool == .ellipse || tool == .arrow }
+
+    /// 画完后还能选中挪动的标注：方框、圆形、箭头，加上文字和画笔（D-21）。马赛克不行。
+    var isEditable: Bool { isShape || tool == .text || tool == .pen }
+
+    private var font: NSFont { NSFont.systemFont(ofSize: fontSize, weight: .medium) }
+
+    /// 文字占的范围，左上角是 points[0]。
+    var textBounds: CGRect {
+        CGRect(origin: points.first ?? .zero, size: (text as NSString).size(withAttributes: [.font: font]))
+    }
+
+    /// 选中时画的虚线外框：圆形是外接矩形，文字、画笔是外围留一点空的范围。方框、箭头不画。
+    var selectionBox: CGRect? {
+        switch tool {
+        case .ellipse where points.count > 1: return CGRect(from: points[0], to: points[1])
+        case .text: return textBounds.insetBy(dx: -3, dy: -3)
+        case .pen:
+            let box = points.reduce(CGRect.null) { $0.union(CGRect(origin: $1, size: .zero)) }
+            return box.insetBy(dx: -(width / 2 + 3), dy: -(width / 2 + 3))
+        default: return nil
+        }
+    }
+
+    /// 点在线条上（线宽两侧各加 6 点余量）算点中。方框、圆形只认线条，框里的空白处可以接着画新的（D-20）。
+    /// 文字点在字的范围里就算（D-21）。
+    func hitTest(_ p: CGPoint) -> Bool {
+        guard isEditable, !points.isEmpty else { return false }
+        if tool == .text { return textBounds.insetBy(dx: -3, dy: -3).contains(p) }
+        guard points.count > 1 else { return false }
+        let path = CGMutablePath()
+        switch tool {
+        case .rect: path.addRect(CGRect(from: points[0], to: points[1]))
+        case .ellipse: path.addEllipse(in: CGRect(from: points[0], to: points[1]))
+        case .pen: path.addLines(between: points)
+        default: path.addLines(between: [points[0], points[1]])
+        }
+        return path.copy(strokingWithWidth: width + 12, lineCap: .round, lineJoin: .round, miterLimit: 10).contains(p)
     }
 
     var isMeaningful: Bool {
@@ -103,11 +148,7 @@ struct Annotation {
                         hints: [.interpolation: NSNumber(value: NSImageInterpolation.none.rawValue)])
             context.restoreGraphicsState()
         case .text:
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: fontSize, weight: .medium),
-                .foregroundColor: color,
-            ]
-            (text as NSString).draw(at: start, withAttributes: attrs)
+            (text as NSString).draw(at: start, withAttributes: [.font: font, .foregroundColor: color])
         }
     }
 

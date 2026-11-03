@@ -192,7 +192,9 @@ namespace EZSnap
                 // 标注是全局坐标，平移到本屏来画；马赛克用本屏自己的底图。
                 g.TranslateTransform(-origin.X, -origin.Y);
                 var mosaics = new[] { Mosaic };
-                foreach (var a in session.Annotations) a.Draw(g, mosaics);
+                // 正在重新编辑的文字由输入框代替，不画（D-21）。
+                for (var i = 0; i < session.Annotations.Count; i++)
+                    if (i != session.EditingText) session.Annotations[i].Draw(g, mosaics);
                 session.Current?.Draw(g, mosaics);
                 g.Restore(state);
             }
@@ -223,8 +225,29 @@ namespace EZSnap
                     foreach (var p in session.HandlePoints)
                         g.FillRectangle(brush, p.X - origin.X - s, p.Y - origin.Y - s, s * 2, s * 2);
             }
+            var shape = session.SelectedShape;
+            if (shape != null) DrawShapeSelection(g, shape, origin);
             if (Mouse.HasValue && session.ShowsMagnifier) DrawMagnifier(g, Mouse.Value);
             if (session.ToolbarHost == this) session.Toolbar.Paint(g);
+        }
+
+        /// <summary>选中的标注（D-20、D-21）：白底蓝边的控制点，和选区的实心控制点区分开；椭圆、文字、画笔另画一圈虚线外框。</summary>
+        private void DrawShapeSelection(Graphics g, Annotation shape, Point origin)
+        {
+            var smoothing = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.None;
+            if (shape.SelectionBox is RectangleF box)
+                using (var dashed = new Pen(Theme.Accent, DpiScale) { DashPattern = new float[] { 4, 3 } })
+                    g.DrawRectangle(dashed, box.X - origin.X, box.Y - origin.Y, box.Width, box.Height);
+            var s = 4 * DpiScale;
+            using (var border = new Pen(Theme.Accent, DpiScale))
+                foreach (var p in session.ShapeHandlePoints)
+                {
+                    var r = new RectangleF(p.X - origin.X - s, p.Y - origin.Y - s, s * 2, s * 2);
+                    g.FillRectangle(Brushes.White, r);
+                    g.DrawRectangle(border, r.X, r.Y, r.Width, r.Height);
+                }
+            g.SmoothingMode = smoothing;
         }
 
         private void DrawSizeLabel(Graphics g, RectangleF r, string text)

@@ -11,6 +11,9 @@ final class ToolbarView: NSView {
     var onStyleChange: (() -> Void)?
 
     var selectedTool: Tool? { didSet { updateState() } }
+    /// 选中了已画的标注时，样式面板按它的工具显示；为 nil 时按 selectedTool（D-21）。
+    var panelTool: Tool? { didSet { updateState() } }
+    private var shownPanelTool: Tool? { panelTool ?? selectedTool }
     var canUndo = false { didSet { updateState() } }
 
     static let rowHeight: CGFloat = 40
@@ -73,17 +76,20 @@ final class ToolbarView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// 共用样式被别处改了（选中标注时换成它的颜色和粗细，D-20），重画面板。
+    func refreshStyle() { panel.needsDisplay = true }
+
     var preferredSize: CGSize {
         CGSize(width: barWidth,
-               height: selectedTool == nil ? Self.rowHeight : Self.rowHeight + Self.gap + Self.panelHeight)
+               height: shownPanelTool == nil ? Self.rowHeight : Self.rowHeight + Self.gap + Self.panelHeight)
     }
 
     private func updateState() {
         for (tool, button) in toolButtons { button.isSelected = tool == selectedTool }
         undoButton.isEnabled = canUndo
         bar.frame = CGRect(x: 0, y: 0, width: barWidth, height: Self.rowHeight)
-        panel.isHidden = selectedTool == nil
-        panel.showsColors = selectedTool != .mosaic
+        panel.isHidden = shownPanelTool == nil
+        panel.showsColors = shownPanelTool != .mosaic
         panel.frame = CGRect(x: 0, y: Self.rowHeight + Self.gap, width: panel.preferredWidth, height: Self.panelHeight)
     }
 

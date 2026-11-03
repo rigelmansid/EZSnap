@@ -24,6 +24,9 @@ namespace EZSnap
         private const float RowHeight = 40, PanelHeight = 34, Gap = 4, ButtonSize = 32, SizeSlot = 28, ColorSlot = 22;
 
         public Tool? SelectedTool;
+        /// <summary>选中了已画的标注时，样式面板按它的工具显示；为 null 时按 SelectedTool（D-21）。</summary>
+        public Tool? PanelTool;
+        private Tool? ShownPanelTool => PanelTool ?? SelectedTool;
         public bool CanUndo;
         public bool Visible;
         public float Scale = 1;
@@ -70,12 +73,12 @@ namespace EZSnap
 
         private int Px(float v) => (int)Math.Round(v * Scale);
 
-        private bool ShowsColors => SelectedTool != Tool.Mosaic;
+        private bool ShowsColors => ShownPanelTool != Tool.Mosaic;
         private float PanelWidth => 6 + SizeSlot * 3 + (ShowsColors ? 9 + ColorSlot * AnnotationStyle.Colors.Length : 0) + 6;
 
-        public Size Size => new Size(Px(barWidth), Px(SelectedTool == null ? RowHeight : RowHeight + Gap + PanelHeight));
+        public Size Size => new Size(Px(barWidth), Px(ShownPanelTool == null ? RowHeight : RowHeight + Gap + PanelHeight));
         private Rectangle BarRect => new Rectangle(Location, new Size(Px(barWidth), Px(RowHeight)));
-        private Rectangle PanelRect => SelectedTool == null ? Rectangle.Empty
+        private Rectangle PanelRect => ShownPanelTool == null ? Rectangle.Empty
             : new Rectangle(Location.X, Location.Y + Px(RowHeight + Gap), Px(PanelWidth), Px(PanelHeight));
 
         public bool HitTest(Point p) => Visible && (BarRect.Contains(p) || PanelRect.Contains(p));
@@ -161,7 +164,7 @@ namespace EZSnap
                 var color = !enabled ? Color.FromArgb(191, 191, 191) : selected ? Theme.Accent : tint;
                 DrawIcon(g, b, cell, color);
             }
-            if (SelectedTool != null) PaintStyle(g);
+            if (ShownPanelTool != null) PaintStyle(g);
             g.Restore(state);
         }
 

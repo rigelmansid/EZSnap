@@ -27,9 +27,17 @@ namespace EZSnap
     internal sealed class CaptureSession
     {
         public enum Phase { Choosing, Dragging, Selected }
-        private enum DragKind { None, Creating, Moving, Resizing, Drawing }
+        private enum DragKind { None, Creating, Moving, Resizing, Drawing, Editing }
         private enum Finish { Copy, Save, Pin }
         private enum Handle { TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left }
+
+        /// <summary>标注的控制点：矩形、椭圆是外接矩形的 8 个点（Box），箭头是两端（End 为 0 或 1）（D-20）。</summary>
+        private struct ShapeHandle
+        {
+            public bool IsEnd;
+            public int End;
+            public Handle Box;
+        }
 
         public event Action<CaptureResult> Finished;
         public readonly List<OverlayForm> Forms;
@@ -42,6 +50,28 @@ namespace EZSnap
         public Annotation Current { get; private set; }
         public OverlayForm ToolbarHost { get; private set; }
         public bool IsEditingText => textBox != null;
+
+        /// <summary>选中的标注（Annotations 的下标）：矩形、椭圆、箭头、文字或画笔（D-20、D-21）。工具条的样式面板跟着显示它的样式。</summary>
+        public int? SelectedAnnotation
+        {
+            get => selectedAnnotation;
+            private set
+            {
+                selectedAnnotation = value;
+                Toolbar.PanelTool = value.HasValue ? Annotations[value.Value].Tool : (Tool?)null;
+            }
+        }
+        private int? selectedAnnotation;
+
+        /// <summary>正在重新编辑的文字标注（下标）。编辑期间不画它，由输入框代替（D-21）。</summary>
+        public int? EditingText { get; private set; }
+
+        /// <summary>每次改动标注前的整组标注（深拷贝），撤销时取回（D-20）。</summary>
+        private readonly List<List<Annotation>> history = new List<List<Annotation>>();
+        private int editIndex;
+        private ShapeHandle? editHandle;
+        private Annotation editOriginal;
+        private List<Annotation> editBefore;
 
         private bool showHex;
         /// <summary>放大镜里的颜色格式，各块屏幕共用，按 Shift 切换。</summary>
@@ -74,7 +104,7 @@ namespace EZSnap
             Toolbar.PinClicked += () => DoFinish(Finish.Pin);
             Toolbar.CancelClicked += () => Close(CaptureKind.Cancelled);
             Toolbar.DoneClicked += () => DoFinish(Finish.Copy);
-            Toolbar.StyleChanged += () => { ApplyStyleToTextBox(); Redraw(); };
+            Toolbar.StyleChanged += ApplyStyle;
         }
 
         public void Begin()
@@ -120,6 +150,7 @@ namespace EZSnap
                     case DragKind.Resizing: return true;
                     case DragKind.Moving:
                     case DragKind.Drawing: return false;
+                    case DragKind.Editing: return editHandle != null;
                     default: return CurrentPhase != Phase.Selected;
                 }
             }
@@ -127,6 +158,12 @@ namespace EZSnap
 
         public IEnumerable<PointF> HandlePoints =>
             CurrentPhase == Phase.Selected ? AllHandles.Select(h => HandlePoint(h, Selection)) : Enumerable.Empty<PointF>();
+
+        /// <summary>选中的标注；画控制点用。</summary>
+        public Annotation SelectedShape => CurrentPhase == Phase.Selected && SelectedAnnotation.HasValue ? Annotations[SelectedAnnotation.Value] : null;
+
+        public IEnumerable<PointF> ShapeHandlePoints =>
+            SelectedShape != null ? ShapeHandles(SelectedShape).Select(x => x.Point) : Enumerable.Empty<PointF>();
 
         /// <summary>尺寸标签上的像素数，和导出一致。</summary>
         public string SizeText(RectangleF r)
@@ -187,18 +224,31 @@ namespace EZSnap
                 case Phase.Selected:
                     if (clicks == 2 && Selection.Contains(p))
                     {
-                        DoFinish(Finish.Copy);
+                        // 双击文字：重新编辑（D-21），第一下已经选中了它；双击别处：完成。
+                        if (AnnotationIndexAt(p) is int t && Annotations[t].Tool == Tool.Text) EditText(t, form);
+                        else DoFinish(Finish.Copy);
                         return;
                     }
                     var h = HandleAt(p);
-                    if (h != null)
+                    if (ShapeHandleAt(p) is { } sh)
                     {
+                        BeginEditing(sh.Item1, sh.Item2, p);
+                    }
+                    else if (h != null)
+                    {
+                        SelectedAnnotation = null;
                         drag = DragKind.Resizing;
                         dragHandle = h.Value;
                         dragOriginal = Selection;
                     }
+                    else if (Selection.Contains(p) && AnnotationIndexAt(p) is int hit)
+                    {
+                        SelectAnnotation(hit);
+                        BeginEditing(hit, null, p);
+                    }
                     else if (Selection.Contains(p) && tool != null)
                     {
+                        SelectedAnnotation = null;
                         if (tool == Tool.Text)
                         {
                             BeginText(p, form);
@@ -224,9 +274,14 @@ namespace EZSnap
                         dragOriginal = Selection;
                         SetCursor(p, Cursors.SizeAll);
                     }
+                    else
+                    {
+                        SelectedAnnotation = null;
+                    }
                     break;
             }
             LayoutToolbar();
+            Redraw();
         }
 
         public void MouseDragged(PointF point)
@@ -261,6 +316,9 @@ namespace EZSnap
                 case DragKind.Drawing:
                     Current?.Extend(p);
                     break;
+                case DragKind.Editing:
+                    Annotations[editIndex] = Edited(editOriginal, editHandle, dragStart, p);
+                    break;
             }
             LayoutToolbar();
             Redraw();
@@ -284,8 +342,19 @@ namespace EZSnap
                     }
                     break;
                 case DragKind.Drawing:
-                    if (Current != null && Current.IsMeaningful) Annotations.Add(Current);
+                    if (Current != null && Current.IsMeaningful)
+                    {
+                        history.Add(Snapshot());
+                        Annotations.Add(Current);
+                        // 刚画完的矩形、椭圆、箭头直接选中，可以马上调整（D-20）；画笔不选中，接着画下一笔（D-21）。
+                        if (Current.IsShape) SelectedAnnotation = Annotations.Count - 1;
+                    }
                     Current = null;
+                    break;
+                case DragKind.Editing:
+                    if (!SameList(Annotations, editBefore)) history.Add(editBefore);
+                    editOriginal = null;
+                    editBefore = null;
                     break;
                 case DragKind.Resizing:
                     if (Selection.Width < 4 || Selection.Height < 4)
@@ -344,6 +413,11 @@ namespace EZSnap
             if (CurrentPhase == Phase.Selected)
             {
                 if (key == Keys.Return) { DoFinish(Finish.Copy); return true; }
+                if (mods == Keys.None && (key == Keys.Delete || key == Keys.Back) && SelectedAnnotation != null)
+                {
+                    DeleteSelectedAnnotation();
+                    return true;
+                }
                 return false;
             }
             if (mods == Keys.None && key == Keys.C)
@@ -376,6 +450,9 @@ namespace EZSnap
             drag = DragKind.None;
             Selection = RectangleF.Empty;
             Annotations.Clear();
+            history.Clear();
+            SelectedAnnotation = null;
+            EditingText = null;
             Current = null;
             tool = null;
             Toolbar.SelectedTool = null;
@@ -389,20 +466,37 @@ namespace EZSnap
         private void ToggleTool(Tool t)
         {
             CommitText();
+            SelectedAnnotation = null;
             tool = tool == t ? (Tool?)null : t;
             Toolbar.SelectedTool = tool;
             LayoutToolbar();
             Redraw();
         }
 
-        /// <summary>有标注或正在输入文字时可以撤销；撤销正在输入的文字框会把它整个去掉。</summary>
-        private void UpdateUndoButton() => Toolbar.CanUndo = textBox != null || Annotations.Count > 0;
+        /// <summary>有改动记录或正在输入文字时可以撤销；撤销正在输入的文字框会把它整个去掉。</summary>
+        private void UpdateUndoButton() => Toolbar.CanUndo = textBox != null || history.Count > 0;
+
+        public bool CanUndo => textBox != null || history.Count > 0;
 
         private void Undo()
         {
-            if (textBox != null) RemoveTextBox();
-            else if (Annotations.Count > 0) Annotations.RemoveAt(Annotations.Count - 1);
+            if (textBox != null)
+            {
+                RemoveTextBox();
+                // 撤销重新编辑：丢掉改动，原来的文字照旧显示。
+                EditingText = null;
+            }
+            else if (history.Count > 0)
+            {
+                // 撤销的可能是添加、挪动、改大小、改样式或删除，一律换回改动前的整组标注（D-20）。
+                var previous = history[history.Count - 1];
+                history.RemoveAt(history.Count - 1);
+                Annotations.Clear();
+                Annotations.AddRange(previous);
+                SelectedAnnotation = null;
+            }
             UpdateUndoButton();
+            LayoutToolbar();
             // 撤销完可能又能拖动选区了，光标马上跟着变，不等鼠标再动。
             if (mouse.HasValue) UpdateCursor(mouse.Value);
             Redraw();
@@ -433,9 +527,162 @@ namespace EZSnap
             }
         }
 
+        // MARK: 调整已画的标注（D-20、D-21）
+
+        private List<Annotation> Snapshot() => Annotations.Select(a => a.Clone()).ToList();
+
+        private static bool SameList(List<Annotation> a, List<Annotation> b) =>
+            a.Count == b.Count && a.Zip(b, (x, y) => x.SameAs(y)).All(same => same);
+
+        /// <summary>
+        /// 当前工具下能不能点选这个标注（D-21）：没选工具或选的是矩形、椭圆、箭头时都能点；
+        /// 文字工具下只能点文字；画笔、马赛克工具下都点不中，点击照常画。
+        /// </summary>
+        private bool CanSelect(Annotation a)
+        {
+            if (!a.IsEditable) return false;
+            switch (tool)
+            {
+                case null:
+                case Tool.Rect:
+                case Tool.Ellipse:
+                case Tool.Arrow: return true;
+                case Tool.Text: return a.Tool == Tool.Text;
+                default: return false;
+            }
+        }
+
+        /// <summary>点中的标注，后画的在上面，优先。</summary>
+        private int? AnnotationIndexAt(PointF p)
+        {
+            var tolerance = 6 * ScaleAt(p);
+            for (var i = Annotations.Count - 1; i >= 0; i--)
+                if (CanSelect(Annotations[i]) && Annotations[i].HitTest(p, tolerance)) return i;
+            return null;
+        }
+
+        private static IEnumerable<(ShapeHandle Handle, PointF Point)> ShapeHandles(Annotation a)
+        {
+            if (!a.IsShape || a.Points.Count < 2) yield break;
+            if (a.Tool == Tool.Arrow)
+            {
+                yield return (new ShapeHandle { IsEnd = true, End = 0 }, a.Points[0]);
+                yield return (new ShapeHandle { IsEnd = true, End = 1 }, a.Points[1]);
+                yield break;
+            }
+            var r = Annotation.RectFrom(a.Points[0], a.Points[1]);
+            foreach (var h in AllHandles) yield return (new ShapeHandle { Box = h }, HandlePoint(h, r));
+        }
+
+        /// <summary>选中标注的控制点。比选区的控制点优先：两者重叠时先调整标注。</summary>
+        private (int, ShapeHandle)? ShapeHandleAt(PointF p)
+        {
+            if (CurrentPhase != Phase.Selected || !SelectedAnnotation.HasValue) return null;
+            var tolerance = 6 * ScaleAt(p);
+            var i = SelectedAnnotation.Value;
+            foreach (var (handle, point) in ShapeHandles(Annotations[i]))
+                if (Math.Abs(point.X - p.X) <= tolerance && Math.Abs(point.Y - p.Y) <= tolerance) return (i, handle);
+            return null;
+        }
+
+        /// <summary>
+        /// 选中标注时，工具条显示它的颜色和粗细，方便直接改。矩形、椭圆、箭头还会切到它的工具，框里接着画的是同一种（D-20）；
+        /// 文字、画笔不切，否则下一次点击就会新建文字或画新线（D-21）。线宽、字号存的是乘过缩放的像素，按画下时的缩放换算回去。
+        /// </summary>
+        private void SelectAnnotation(int i)
+        {
+            var a = Annotations[i];
+            SelectedAnnotation = i;
+            if (a.IsShape)
+            {
+                tool = a.Tool;
+                Toolbar.SelectedTool = a.Tool;
+            }
+            var c = Array.FindIndex(AnnotationStyle.Colors, x => x.ToArgb() == a.Color.ToArgb());
+            if (c >= 0) style.ColorIndex = c;
+            var scale = a.Scale > 0 ? a.Scale : 1;
+            for (var s = 0; s < 3; s++)
+            {
+                var size = a.Tool == Tool.Text ? AnnotationStyle.FontSizes[s] : AnnotationStyle.WidthFor(a.Tool, s);
+                var actual = a.Tool == Tool.Text ? a.FontSize : a.Width;
+                if (Math.Abs(size * scale - actual) < 0.01f) style.SizeIndex = s;
+            }
+        }
+
+        private void BeginEditing(int i, ShapeHandle? handle, PointF p)
+        {
+            drag = DragKind.Editing;
+            editIndex = i;
+            editHandle = handle;
+            editOriginal = Annotations[i].Clone();
+            editBefore = Snapshot();
+            dragStart = p;
+            if (handle == null) SetCursor(p, Cursors.SizeAll);
+        }
+
+        private static Annotation Edited(Annotation a, ShapeHandle? handle, PointF start, PointF p)
+        {
+            var b = a.Clone();
+            if (handle == null)
+                b.Points = a.Points.Select(q => new PointF(q.X + p.X - start.X, q.Y + p.Y - start.Y)).ToList();
+            else if (handle.Value.IsEnd)
+                b.Points[handle.Value.End] = p;
+            else
+            {
+                var r = Resize(handle.Value.Box, Annotation.RectFrom(a.Points[0], a.Points[1]), p);
+                b.Points = new List<PointF> { r.Location, new PointF(r.Right, r.Bottom) };
+            }
+            return b;
+        }
+
+        private void DeleteSelectedAnnotation()
+        {
+            if (!SelectedAnnotation.HasValue) return;
+            history.Add(Snapshot());
+            Annotations.RemoveAt(SelectedAnnotation.Value);
+            SelectedAnnotation = null;
+            UpdateUndoButton();
+            LayoutToolbar();
+            if (mouse.HasValue) UpdateCursor(mouse.Value);
+            Redraw();
+        }
+
+        /// <summary>工具条上改了颜色或粗细：改正在输入的文字，或者改选中的标注。</summary>
+        public void ApplyStyle()
+        {
+            ApplyStyleToTextBox();
+            if (SelectedAnnotation is int i)
+            {
+                var a = Annotations[i].Clone();
+                a.Color = style.Color;
+                if (a.Tool == Tool.Text) a.FontSize = style.FontSize * a.Scale; else a.Width = style.Width(a.Tool) * a.Scale;
+                if (!a.SameAs(Annotations[i]))
+                {
+                    history.Add(Snapshot());
+                    Annotations[i] = a;
+                    UpdateUndoButton();
+                }
+            }
+            Redraw();
+        }
+
+        /// <summary>重新编辑文字：在原处打开输入框，填上原来的字（D-21）。</summary>
+        private void EditText(int i, OverlayForm form)
+        {
+            SelectAnnotation(i);
+            SelectedAnnotation = null;
+            EditingText = i;
+            drag = DragKind.None;
+            var a = Annotations[i];
+            BeginText(a.Points[0], form, a.Text);
+            LayoutToolbar();
+            Redraw();
+        }
+
         // MARK: 文字
 
-        private void BeginText(PointF p, OverlayForm form)
+        /// <summary>text 为空时是新建：输入框竖直居中在点击处。否则是重新编辑：p 是原来文字的左上角，输入框放回原处。</summary>
+        private void BeginText(PointF p, OverlayForm form, string text = "")
         {
             var box = new TextBox
             {
@@ -443,11 +690,16 @@ namespace EZSnap
                 // WinForms 的输入框不能透明；用深灰底，提交后文字直接画在截图上。
                 BackColor = Color.FromArgb(48, 48, 48),
                 Multiline = false,
+                Text = text,
             };
             textBox = box;
             textHost = form;
             ApplyStyleToTextBox();
-            box.Location = new Point((int)p.X - form.GlobalBounds.X, (int)p.Y - form.GlobalBounds.Y - box.Height / 2);
+            box.Location = text.Length == 0
+                ? new Point((int)p.X - form.GlobalBounds.X, (int)p.Y - form.GlobalBounds.Y - box.Height / 2)
+                // 和 CommitText 的换算相反：左边留 1 像素。
+                : new Point((int)Math.Round(p.X) - 1 - form.GlobalBounds.X, (int)Math.Round(p.Y) - form.GlobalBounds.Y);
+            box.SelectionStart = box.Text.Length;
             box.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Return || e.KeyCode == Keys.Escape)
@@ -509,8 +761,35 @@ namespace EZSnap
             var color = box.ForeColor;
             var fontSize = box.Font.Size;
             RemoveTextBox();
-            if (text.Length > 0)
+            if (EditingText is int i)
+            {
+                // 重新编辑（D-21）：输入框没动过，位置沿用原来的，不经过来回换算；字删光了就删掉这个标注。
+                EditingText = null;
+                var a = Annotations[i].Clone();
+                a.Text = text;
+                a.Color = color;
+                // 字号没改时沿用原值（Font 回读的字号可能有浮点误差），改了才按当前屏幕记缩放。
+                if (Math.Abs(fontSize - a.FontSize) >= 0.01f)
+                {
+                    a.FontSize = fontSize;
+                    a.Scale = host.DpiScale;
+                }
+                if (text.Length == 0)
+                {
+                    history.Add(Snapshot());
+                    Annotations.RemoveAt(i);
+                }
+                else if (!a.SameAs(Annotations[i]))
+                {
+                    history.Add(Snapshot());
+                    Annotations[i] = a;
+                }
+            }
+            else if (text.Length > 0)
+            {
+                history.Add(Snapshot());
                 Annotations.Add(new Annotation { Tool = Tool.Text, Color = color, Width = 0, Points = { origin }, Text = text, FontSize = fontSize, Scale = host.DpiScale });
+            }
             UpdateUndoButton();
             Redraw();
         }
@@ -569,8 +848,12 @@ namespace EZSnap
                 var h = HandleAt(p);
                 if (host != null && Toolbar.HitTest(new Point((int)p.X - host.GlobalBounds.X, (int)p.Y - host.GlobalBounds.Y)))
                     cursor = Cursors.Default;
+                else if (ShapeHandleAt(p) is { } sh)
+                    cursor = sh.Item2.IsEnd ? Cursors.Cross : HandleCursor(sh.Item2.Box);
                 else if (h != null)
                     cursor = HandleCursor(h.Value);
+                else if (Selection.Contains(p) && AnnotationIndexAt(p) != null)
+                    cursor = Cursors.SizeAll;
                 else if (Selection.Contains(p) && tool != null)
                     cursor = tool == Tool.Text ? Cursors.IBeam : Cursors.Cross;
                 else if (Selection.Contains(p) && Annotations.Count == 0)
@@ -718,6 +1001,11 @@ namespace EZSnap
             tool = selectedTool;
             Annotations.Clear();
             Annotations.AddRange(annotations);
+            // 当作逐个画上去的：每个标注一条撤销记录。
+            history.Clear();
+            for (var i = 0; i < Annotations.Count; i++) history.Add(Annotations.Take(i).Select(a => a.Clone()).ToList());
+            SelectedAnnotation = null;
+            EditingText = null;
             Toolbar.SelectedTool = selectedTool;
             UpdateUndoButton();
             LayoutToolbar();
