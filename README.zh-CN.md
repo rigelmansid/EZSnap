@@ -108,7 +108,7 @@ cd EZSnap
 ./scripts/install.sh
 ```
 
-它会按你这台 Mac 的架构构建，装到当前用户的 `~/Applications/EZSnap.app`，不需要管理员密码。
+它会按你这台 Mac 的架构构建，装到 `/Applications/EZSnap.app`，和从 DMG 拖进“应用程序”的位置一样。需要管理员账户（不用输密码）；以前装在 `~/Applications` 的旧版本会一并删掉。
 自己构建的 app 没有隔离标记，打开时 macOS 不会拦。
 
 ---

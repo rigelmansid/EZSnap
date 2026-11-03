@@ -125,9 +125,10 @@ cd EZSnap
 ./scripts/install.sh
 ```
 
-This builds the app for your Mac and installs it to `~/Applications/EZSnap.app` for the current
-user, with no administrator password. A build you make yourself isn't quarantined, so macOS doesn't
-block it.
+This builds the app for your Mac and installs it to `/Applications/EZSnap.app`, the same place as
+dragging it in from the DMG. It needs an administrator account (no password prompt) and removes an
+older copy in `~/Applications` if there is one. A build you make yourself isn't quarantined, so macOS
+doesn't block it.
 
 ---
 
