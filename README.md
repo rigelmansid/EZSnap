@@ -19,7 +19,7 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
 
 </div>
 
-> **Status: early.** [0.2.0](../../releases/latest) is the latest release, with installers for both
+> **Status: early.** [0.2.1](../../releases/latest) is the latest release, with installers for both
 > systems. The Mac version runs on macOS 26 (Apple Silicon); the Intel build has only been run under
 > Rosetta. The Windows version has passed its self-test, including a real screen capture, on GitHub's
 > Windows runners, but has not yet been tried on a real Windows 10 PC. Neither installer is signed,

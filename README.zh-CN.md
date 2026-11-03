@@ -19,7 +19,7 @@
 
 </div>
 
-> **状态：早期。** [0.2.0](../../releases/latest) 是最新的发布版，有两个系统的安装包。Mac 版在
+> **状态：早期。** [0.2.1](../../releases/latest) 是最新的发布版，有两个系统的安装包。Mac 版在
 > macOS 26（Apple Silicon）上运行，Intel 版只在 Rosetta 下跑过。Windows 版在 GitHub 的 Windows 机器上
 > 通过了自检（包括一次真实截屏），还没在真实的 Windows 10 电脑上试过。两个安装包都没有签名，第一次打开时系统会提示。
 
