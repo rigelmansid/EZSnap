@@ -54,3 +54,31 @@
 - 原因：.NET Framework 的 Graphics.CopyFromScreen 会校验参数，只认单个取值，SourceCopy | CaptureBlt（0x40CC0020）被拒；CI 的自检只渲染合成图片，从没调用过真实截屏，所以没发现。
 - 修法：改为直接调用 BitBlt（SRCCOPY | CAPTUREBLT），截图格式用不带透明通道的 32 位；自检里加上真实截屏和取窗口列表，CI 上也会跑到。
 - 启示：自检不能只测“画”，真正和系统打交道的入口至少要在 CI 上调用一次；Windows 版的 API 行为要以 .NET Framework 4.8 为准，不能按新版 .NET 的文档想当然。
+
+### 坑 7 macOS 26 菜单里“屏幕录制权限设置…”前面空了一块（2026-10-21，已解决 2026-10-21）
+
+- 现象：菜单栏菜单最后一组里，“屏幕录制权限设置…”比别的项多缩进一截。
+- 原因：macOS 26 自动给系统标准操作（如 terminate: 的“退出”）配图标；同一组（两条分隔线之间）里没有图标的项会空出图标位来对齐。
+- 修法：给权限设置项也配系统图标 lock.shield（AppDelegate.rebuildMenu）。
+- 启示：新加菜单项时看同组里有没有系统会自动配图标的项；用小程序打印 NSMenuItem.image 就能确认。
+
+### 坑 8 macOS 自带 bash 3.2 在 set -u 下展开空数组会报错（2026-10-21，已解决 2026-10-21）
+
+- 现象：build.sh 加了 ARCH_FLAGS 数组后，不带 UNIVERSAL=1 运行时报 “ARCH_FLAGS[@]: unbound variable”，install.sh 也跟着用不了。
+- 原因：bash 3.2 把空数组的 "${a[@]}" 当成未定义变量，set -u 下直接退出；新版 bash 没有这个问题。
+- 修法：写成 ${a[@]+"${a[@]}"}；改完把带参数和不带参数两种调用都跑一遍。
+- 启示：脚本要在系统自带的 /bin/bash 上测；改动只测了新加的那条路径，差点把原来的路径弄坏。
+
+### 坑 9 PlistBuddy 改一个值会把 Info.plist 的键重新排序（2026-10-21，已解决 2026-10-21）
+
+- 现象：用 PlistBuddy 改版本号后，git diff 显示 Info.plist 改了 12 行，几个键换了位置。
+- 原因：PlistBuddy 读进来再整份写回，按键名排序。
+- 修法：恢复原文件，只用文本替换改版本号那两行。
+- 启示：改入库的 plist 用文本替换，或改完看 git diff 只剩想改的行；plutil -lint 检查格式。
+
+### 坑 10 Windows 版第二次建文字输入框就报 Parameter is not valid（2026-11-03，已解决 2026-11-03）
+
+- 现象：CI 自检里第二次双击文字重新编辑时，new TextBox() 在 Font.GetHeight 抛出 ArgumentException: Parameter is not valid。真机上同一次运行里第二次用文字工具应该也会这样。
+- 原因：ApplyStyleToTextBox 先 Dispose 输入框原来的字体再换新字体；输入框还没加进窗口时，它的 Font 是全进程共用的 Control.DefaultFont，被释放后再建任何控件都会出错。以前的自检每个进程只建一次输入框，没测出来。
+- 修法：输入框的字体由会话自己建、自己记（textFont），只释放它；输入框移除时一并释放。自检加了“共用的默认字体仍然可用”。
+- 启示：控件的 Font 可能是继承来的共用对象，不是自己 new 的不要 Dispose；自检要覆盖同一功能连续用两次。
