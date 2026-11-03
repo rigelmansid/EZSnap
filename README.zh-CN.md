@@ -31,7 +31,7 @@
   图就在剪贴板里了。
 - **窗口自动识别。** 鼠标悬停高亮所在的窗口，单击整个选中，横跨两块屏的窗口也一样。
 - **分享前先标注。** 矩形、椭圆、箭头、画笔、文字、马赛克，直接画在定格的屏幕上。画完还能调整，每一步都能撤销。
-- **小巧、只在本机。** 不依赖第三方库，不用账号，不联网。设置只存在你自己的电脑上。
+- **小巧、只在本机。** 不依赖第三方库，不用账号。唯一的联网是检查更新，可以关掉。设置只存在你自己的电脑上。
 
 ---
 
@@ -59,6 +59,7 @@
 ### 快捷键与语言
 - 截图快捷键可以选三个预设之一，也可以录制任意组合键
 - English、简体中文、繁體中文，或跟随系统，切换后立即生效，不用重启
+- GitHub 上有新版本时提示，点一下打开发布页下载。检查可以关掉
 
 ---
 
@@ -167,7 +168,10 @@ SIGN_IDENTITY="证书名称" ./scripts/install.sh
 <details>
 <summary><b>EZSnap 存了什么，会往外发数据吗？</b></summary>
 
-不联网。只存选的快捷键、界面语言和上次保存的文件夹：
+唯一的联网是检查更新：启动时和之后每天一次，向 GitHub 查询最新发布的版本号，不发送别的内容。
+在菜单里关掉“自动检查更新”就不再自动查；之后只有点“检查更新…”时才联网。
+
+只存选的快捷键、界面语言、上次保存的文件夹和检查更新的设置：
 
 - **macOS：** app 的偏好设置（`~/Library/Preferences/local.ezsnap.app.plist`）
 - **Windows：** `%APPDATA%\EZSnap\settings.txt`，卸载时不删
@@ -194,6 +198,7 @@ SIGN_IDENTITY="证书名称" ./scripts/install.sh
 ./scripts/build.sh                                       # 只生成 build/EZSnap.app，不安装
 ./scripts/package-mac.sh                                 # 生成 dist/EZSnap-版本号.dmg，Apple Silicon + Intel
 build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp   # 自检，PNG 写到 /tmp
+build/EZSnap.app/Contents/MacOS/EZSnap --check-update     # 向 GitHub 查一次最新版本
 swift scripts/make-icon.swift Resources/AppIcon.icns     # 重新生成 Mac 图标
 swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # 重新生成 Windows 图标
 ```
@@ -222,6 +227,7 @@ Windows 版用 `dotnet build windows/EZSnap/EZSnap.csproj -c Release` 构建，�
 | `Sources/EZSnap/ToolbarView.swift` | 工具条和粗细 / 颜色面板 |
 | `Sources/EZSnap/PinWindow.swift` | 钉图窗口 |
 | `Sources/EZSnap/L10n.swift` | 界面语言 |
+| `Sources/EZSnap/UpdateChecker.swift` | 检查 GitHub 上的新版本 |
 | `Sources/EZSnap/SelfTest.swift` | 自检 |
 | `scripts/` | `build.sh`、`install.sh`、`package-mac.sh`（打 DMG）、图标生成脚本 |
 | `windows/` | Windows 版（C#、WinForms）和安装包脚本 |

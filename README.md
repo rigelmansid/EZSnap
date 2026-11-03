@@ -35,8 +35,8 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
   selects all of it, even when it spans two screens.
 - **Annotate before you share.** Rectangles, ellipses, arrows, pen, text and mosaic, drawn directly
   on the frozen screen. Marks stay adjustable after you draw them, and every change can be undone.
-- **Small and local.** No third-party libraries, no account, no network access. Settings stay on
-  your computer.
+- **Small and local.** No third-party libraries and no account. The only network access is the
+  update check, which you can turn off. Settings stay on your computer.
 
 ---
 
@@ -68,6 +68,8 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
 ### Shortcut and language
 - The capture shortcut can be one of three presets or any combination you record
 - English, 简体中文 and 繁體中文, or follow the system. A change applies at once, no restart
+- Tells you when a new version is on GitHub and opens the release page to download it. The check can
+  be turned off
 
 ---
 
@@ -151,6 +153,7 @@ block it.
 | Quit the capture | `Esc` (or right-click with no selection) | Same |
 | Change the shortcut | Menu bar → Shortcut → a preset or Custom… | Tray menu → Shortcut |
 | Change the language | Menu bar → Language | Tray menu → Language |
+| Check for updates | Menu bar → Check for Updates… | Tray menu → Check for Updates… |
 
 With the pen or mosaic tool on, clicks always draw; turn the tool off to select a mark. Mosaic can't be
 moved once drawn.
@@ -187,8 +190,12 @@ on Windows. Function keys (F1–F20 on the Mac, F1–F24 on Windows) can be used
 <details>
 <summary><b>What does EZSnap store, and does it send anything?</b></summary>
 
-It makes no network connections. It stores only the chosen shortcut, the language and the last
-folder you saved to:
+The only connection is the update check: at launch and then once a day, EZSnap asks GitHub for the
+version number of the latest release. Nothing else is sent. Turn off *Check for Updates
+Automatically* in the menu to stop it; *Check for Updates…* then connects only when you click it.
+
+It stores only the chosen shortcut, the language, the last folder you saved to and the update-check
+settings:
 
 - **macOS:** the app's preferences (`~/Library/Preferences/local.ezsnap.app.plist`)
 - **Windows:** `%APPDATA%\EZSnap\settings.txt`, which the uninstaller leaves in place
@@ -217,6 +224,7 @@ Screenshots go only to the clipboard, or to the file you choose.
 ./scripts/build.sh                                       # build/EZSnap.app only, no install
 ./scripts/package-mac.sh                                 # dist/EZSnap-<version>.dmg, Apple Silicon + Intel
 build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp   # self-test, writes PNGs to /tmp
+build/EZSnap.app/Contents/MacOS/EZSnap --check-update     # ask GitHub for the latest release once
 swift scripts/make-icon.swift Resources/AppIcon.icns     # regenerate the Mac icon
 swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # regenerate the Windows icon
 ```
@@ -247,6 +255,7 @@ self-test (including one real capture), and the Inno Setup installer as an artif
 | `Sources/EZSnap/ToolbarView.swift` | Toolbar and the size / color panel |
 | `Sources/EZSnap/PinWindow.swift` | Pinned screenshots |
 | `Sources/EZSnap/L10n.swift` | Interface languages |
+| `Sources/EZSnap/UpdateChecker.swift` | Checking GitHub for a new version |
 | `Sources/EZSnap/SelfTest.swift` | Self-test |
 | `scripts/` | `build.sh`, `install.sh`, `package-mac.sh` (the DMG), the icon generator |
 | `windows/` | The Windows version (C#, WinForms) and its installer script |

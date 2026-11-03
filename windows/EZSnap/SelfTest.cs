@@ -12,7 +12,7 @@ namespace EZSnap
 {
     /// <summary>
     /// 自检：不截屏，用合成图片驱动截图会话，把界面和导出结果写成 PNG，并检查跨屏拼接、窗口选择、快捷键、
-    /// 调整已画的标注（D-20、D-21）等逻辑。直接调用会话的方法，不经过真实的鼠标键盘事件。
+    /// 调整已画的标注（D-20、D-21）、检查更新的版本比较（D-22）等逻辑。直接调用会话的方法，不经过真实的鼠标键盘事件。
     /// 结果写进 selftest.log；有失败时返回 1。不覆盖真实的全局快捷键和手感。
     /// </summary>
     internal static class SelfTest
@@ -33,7 +33,9 @@ namespace EZSnap
                 CrossScreen(dir);
                 Shortcuts();
                 Languages();
+                UpdateLogic();
                 RealCapture(dir);
+                RealUpdateCheck();
             }
             catch (Exception e)
             {
@@ -256,6 +258,36 @@ namespace EZSnap
             // 样式是全局共用的，恢复默认，免得影响后面的检查。
             style.ColorIndex = 0;
             style.SizeIndex = 1;
+        }
+
+        // MARK: 检查更新（D-22）
+
+        private static void UpdateLogic()
+        {
+            foreach (var (a, b, expected) in new[] { ("0.2.0", "0.1.1", true), ("0.1.1", "0.1.1", false), ("0.1.0", "0.1.1", false), ("0.1.10", "0.1.9", true),
+                                                     ("1.0", "0.9.9", true), ("0.1", "0.1.0", false), ("v0.1.2", "0.1.1", true), ("0.1.1", "v0.1.2", false) })
+                Check($"{a} 比 {b} 新：{(expected ? "是" : "否")}", UpdateChecker.IsNewer(a, b) == expected);
+            const string page = "https://github.com/rigelmansid/EZSnap/releases/tag/v0.2.0";
+            var good = UpdateChecker.Parse("{\"tag_name\":\"v0.2.0\",\"html_url\":\"" + page + "\",\"draft\":false}");
+            Check("解析 GitHub 返回内容：去掉 v，取发布页", good?.Version == "0.2.0" && good.Page.AbsoluteUri == page, good?.Version + " " + good?.Page);
+            foreach (var body in new[] { "{\"tag_name\":\"v0.2.0\",\"html_url\":\"https://example.com/x\"}", "{\"message\":\"Not Found\"}", "not json" })
+                Check("无法识别的返回内容不当作新版本：" + body, UpdateChecker.Parse(body) == null);
+            Check("程序版本号取三段：" + UpdateChecker.CurrentVersion, UpdateChecker.CurrentVersion.Split('.').Length == 3);
+        }
+
+        /// <summary>真实访问一次 GitHub。CI 机器共用 IP，可能碰到匿名访问的限流，所以只记结果，不算失败。</summary>
+        private static void RealUpdateCheck()
+        {
+            try
+            {
+                var latest = UpdateChecker.FetchLatest().GetAwaiter().GetResult();
+                Log.Add($"真实检查更新：最新正式版 {latest.Version}，当前 {UpdateChecker.CurrentVersion}，"
+                        + (UpdateChecker.IsNewer(latest.Version, UpdateChecker.CurrentVersion) ? "有新版本" : "已是最新"));
+            }
+            catch (Exception e)
+            {
+                Log.Add("真实检查更新没成功（不算失败）：" + (e.InnerException?.Message ?? e.Message));
+            }
         }
 
         // MARK: 跨屏：A 在左（蓝），B 在右边偏下（红），两屏之间右上方有一块空隙

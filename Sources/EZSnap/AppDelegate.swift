@@ -9,6 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var session: CaptureSession?
     private var isCapturing = false
     private var pins: [PinWindow] = []
+    /// GitHub 上比当前新的版本（D-22）；有就在菜单最上方显示下载项。
+    private var availableUpdate: UpdateChecker.Release?
+    /// 新版本的提示框因为正在截图或别的提示框开着而推迟了。
+    private var pendingUpdateAlert = false
+    private var checkingUpdate = false
+    private var updateTimer: Timer?
 
     /// 选中的预设序号；-1 表示用自定义快捷键（D-6）。
     private var hotKeyIndex: Int {
@@ -58,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !CGPreflightScreenCaptureAccess() {
             CGRequestScreenCaptureAccess()
         }
+        startUpdateChecks()
     }
 
     /// 已经在运行时又双击了图标：再提示一次，免得以为没反应。
@@ -84,6 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         let menu = NSMenu()
         let shortcut = currentShortcut
+
+        // 有新版本时放在最上方（D-22）。不配图标：同组其他项没有图标，配了会让它们空出图标位。
+        if let update = availableUpdate {
+            let item = NSMenuItem(title: L("Download EZSnap \(update.version)…", "下载新版本 \(update.version)…", "下載新版本 \(update.version)…"),
+                                  action: #selector(openUpdatePage), keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
 
         let capture = NSMenuItem(title: L("Capture", "截图", "截圖"), action: #selector(captureFromMenu),
                                  keyEquivalent: shortcut.menuKeyEquivalent ?? "")
@@ -130,6 +146,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let closePins = NSMenuItem(title: L("Close All Pins", "关闭所有钉图", "關閉所有釘圖"), action: #selector(closeAllPins), keyEquivalent: "")
         closePins.target = self
         menu.addItem(closePins)
+
+        menu.addItem(.separator())
+        let check = NSMenuItem(title: L("Check for Updates…", "检查更新…", "檢查更新…"), action: #selector(checkForUpdatesFromMenu), keyEquivalent: "")
+        check.target = self
+        menu.addItem(check)
+        let auto = NSMenuItem(title: L("Check for Updates Automatically", "自动检查更新", "自動檢查更新"), action: #selector(toggleAutoCheck), keyEquivalent: "")
+        auto.target = self
+        auto.state = UpdateChecker.autoCheck ? .on : .off
+        menu.addItem(auto)
 
         menu.addItem(.separator())
         let permission = NSMenuItem(title: L("Screen Recording Permission…", "屏幕录制权限设置…", "螢幕錄製權限設定…"), action: #selector(openPermissionSettings), keyEquivalent: "")
@@ -224,6 +249,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - 检查更新（D-22）
+
+    /// 启动时查一次（自动检查打开时）；之后每小时看一眼，距上次成功检查满 24 小时再查。
+    /// 睡眠期间错过的，醒来后的下一个整点会补上。
+    private func startUpdateChecks() {
+        if UpdateChecker.autoCheck { checkForUpdates(manual: false) }
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            if UpdateChecker.isDue { self.checkForUpdates(manual: false) }
+            self.showPendingUpdateAlert()
+        }
+    }
+
+    @objc private func checkForUpdatesFromMenu() { checkForUpdates(manual: true) }
+
+    @objc private func toggleAutoCheck() {
+        UpdateChecker.autoCheck.toggle()
+        if UpdateChecker.isDue { checkForUpdates(manual: false) }
+        rebuildMenu()
+    }
+
+    @objc private func openUpdatePage() {
+        if let page = availableUpdate?.page { NSWorkspace.shared.open(page) }
+    }
+
+    /// manual 为 true 时是用户点了“检查更新…”：结果总会告诉用户，包括已是最新和失败。
+    /// 自动检查只在发现没提示过的新版本时弹一次，失败不打扰，下一轮再试。
+    private func checkForUpdates(manual: Bool) {
+        guard !checkingUpdate else { return }
+        checkingUpdate = true
+        Task { @MainActor in
+            defer { self.checkingUpdate = false }
+            let current = UpdateChecker.currentVersion
+            do {
+                let latest = try await UpdateChecker.fetchLatest()
+                UpdateChecker.lastCheck = Date()
+                let newer = UpdateChecker.isNewer(latest.version, than: current)
+                self.availableUpdate = newer ? latest : nil
+                self.rebuildMenu()
+                if newer, manual || UpdateChecker.notifiedVersion != latest.version {
+                    self.showUpdateAlert(latest, manual: manual)
+                } else if manual {
+                    self.showAlert(title: L("EZSnap Is Up to Date", "已是最新版本", "已是最新版本"),
+                                   message: L("Version \(current) is the latest.", "当前版本 \(current) 是最新的。", "目前版本 \(current) 是最新的。"))
+                }
+            } catch {
+                if manual {
+                    self.showAlert(title: L("Couldn't Check for Updates", "检查更新失败", "檢查更新失敗"), message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    private func showUpdateAlert(_ release: UpdateChecker.Release, manual: Bool) {
+        // 截图进行中或别的提示框开着时不弹，等截图结束或下一个整点再弹。
+        if !manual, session != nil || isCapturing || NSApp.modalWindow != nil {
+            pendingUpdateAlert = true
+            return
+        }
+        pendingUpdateAlert = false
+        UpdateChecker.notifiedVersion = release.version
+        let alert = NSAlert()
+        alert.messageText = L("EZSnap \(release.version) Is Available", "EZSnap \(release.version) 已发布", "EZSnap \(release.version) 已發佈")
+        alert.informativeText = L("You have \(UpdateChecker.currentVersion). Download the new version from the GitHub release page; it can also be found later in the menu.",
+                                  "当前版本 \(UpdateChecker.currentVersion)。可以到 GitHub 发布页下载新版本，之后也能在菜单里找到下载项。",
+                                  "目前版本 \(UpdateChecker.currentVersion)。可以到 GitHub 發佈頁下載新版本，之後也能在選單裡找到下載項。")
+        alert.addButton(withTitle: L("Download", "下载", "下載"))
+        alert.addButton(withTitle: L("Later", "以后再说", "以後再說"))
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(release.page) }
+        // 和权限提示框一样：提示框开着时按的快捷键不能在关掉后触发截图。
+        HotKey.ignoreBefore = GetCurrentEventTime()
+    }
+
+    private func showPendingUpdateAlert() {
+        guard pendingUpdateAlert, let release = availableUpdate else { return }
+        showUpdateAlert(release, manual: false)
+    }
+
     // MARK: - 截图
 
     @objc private func captureFromMenu() {
@@ -256,8 +360,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handle(_ result: CaptureResult, previousApp: NSRunningApplication?) {
-        // 遮罩窗口还在处理当前事件，下一轮再释放。
-        DispatchQueue.main.async { self.session = nil }
+        // 遮罩窗口还在处理当前事件，下一轮再释放。截图时推迟的新版本提示框，等界面收起后再弹（D-22）。
+        DispatchQueue.main.async {
+            self.session = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.showPendingUpdateAlert() }
+        }
         switch result {
         case .cancelled, .copied:
             previousApp?.activate()

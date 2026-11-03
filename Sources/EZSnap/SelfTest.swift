@@ -45,6 +45,34 @@ enum SelfTest {
         }
         checkEditing(shot: shot, image: image, windows: windows, outputDir: outputDir)
         checkTextAndPen(shot: shot, image: image, windows: windows, outputDir: outputDir)
+        checkUpdateLogic()
+    }
+
+    /// 版本号比较和 GitHub 返回内容的解析（D-22）。不联网。
+    private static func checkUpdateLogic() {
+        var failures = 0
+        func check(_ ok: Bool, _ name: String) {
+            print(ok ? "通过：\(name)" : "失败：\(name)")
+            if !ok { failures += 1 }
+        }
+        let newer: [(String, String, Bool)] = [
+            ("0.2.0", "0.1.1", true), ("0.1.1", "0.1.1", false), ("0.1.0", "0.1.1", false), ("0.1.10", "0.1.9", true),
+            ("1.0", "0.9.9", true), ("0.1", "0.1.0", false), ("v0.1.2", "0.1.1", true), ("0.1.1", "v0.1.2", false),
+        ]
+        for (a, b, expected) in newer {
+            check(UpdateChecker.isNewer(a, than: b) == expected, "\(a) 比 \(b) 新：\(expected ? "是" : "否")")
+        }
+        let page = "https://github.com/rigelmansid/EZSnap/releases/tag/v0.2.0"
+        let good = try? UpdateChecker.parse(Data(#"{"tag_name":"v0.2.0","html_url":"\#(page)","draft":false}"#.utf8))
+        check(good == UpdateChecker.Release(version: "0.2.0", page: URL(string: page)!), "解析 GitHub 返回内容：去掉 v，取发布页")
+        let bad = [#"{"tag_name":"v0.2.0","html_url":"https://example.com/x"}"#, #"{"message":"Not Found"}"#, "not json"]
+        for body in bad {
+            check((try? UpdateChecker.parse(Data(body.utf8))) == nil, "无法识别的返回内容不当作新版本：\(body.prefix(30))")
+        }
+        if failures > 0 {
+            print("自检失败：检查更新有 \(failures) 项不对")
+            exit(1)
+        }
     }
 
     /// 选中、挪动、改大小、改样式、删除已画的标注，再逐步撤销回原样（D-20）。

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
 using System.Threading;
@@ -21,6 +22,13 @@ namespace EZSnap
         private CaptureSession session;
         private bool hotKeyRegistered = true;
         private bool recording;
+        /// <summary>GitHub 上比当前新的版本（D-22）；有就在菜单最上方显示下载项。</summary>
+        private UpdateChecker.Release availableUpdate;
+        /// <summary>新版本的提示因为正在截图或录快捷键而推迟了。</summary>
+        private bool pendingUpdateAlert;
+        private bool checkingUpdate;
+        private bool showingUpdateAlert;
+        private readonly System.Windows.Forms.Timer updateTimer = new System.Windows.Forms.Timer();
 
         public TrayApp()
         {
@@ -53,6 +61,7 @@ namespace EZSnap
                 }
             }) { IsBackground = true };
             listener.Start();
+            StartUpdateChecks();
         }
 
         public static Icon LoadIcon()
@@ -92,6 +101,14 @@ namespace EZSnap
         {
             var shortcut = CurrentShortcut;
             var menu = new ContextMenuStrip();
+            // 有新版本时放在最上方（D-22）。
+            if (availableUpdate != null)
+            {
+                var update = availableUpdate;
+                menu.Items.Add(L.T($"Download EZSnap {update.Version}…", $"下载新版本 {update.Version}…", $"下載新版本 {update.Version}…"), null,
+                    (s, e) => OpenPage(update.Page));
+                menu.Items.Add(new ToolStripSeparator());
+            }
             menu.Items.Add(new ToolStripMenuItem(L.T("Capture", "截图", "截圖"), null, (s, e) => CaptureFromMenu()) { ShortcutKeyDisplayString = shortcut.Title });
 
             var hotKeyItem = new ToolStripMenuItem(hotKeyRegistered ? L.T("Shortcut", "快捷键", "快速鍵")
@@ -121,6 +138,12 @@ namespace EZSnap
             }
             menu.Items.Add(languageItem);
             menu.Items.Add(L.T("Close All Pins", "关闭所有钉图", "關閉所有釘圖"), null, (s, e) => CloseAllPins());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(L.T("Check for Updates…", "检查更新…", "檢查更新…"), null, (s, e) => CheckForUpdates(true));
+            menu.Items.Add(new ToolStripMenuItem(L.T("Check for Updates Automatically", "自动检查更新", "自動檢查更新"), null, (s, e) => ToggleAutoCheck())
+            {
+                Checked = UpdateChecker.AutoCheck(settings),
+            });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(L.T("Exit", "退出", "結束"), null, (s, e) => Quit());
 
@@ -179,6 +202,104 @@ namespace EZSnap
             recording = false;
         }
 
+        // MARK: 检查更新（D-22）
+
+        /// <summary>
+        /// 启动后几秒查一次（自动检查打开时，等托盘图标和消息循环就绪）；之后每小时看一眼，距上次成功检查满 24 小时再查。
+        /// 睡眠期间错过的，醒来后的下一个整点会补上。
+        /// </summary>
+        private void StartUpdateChecks()
+        {
+            var first = new System.Windows.Forms.Timer { Interval = 5000 };
+            first.Tick += (s, e) =>
+            {
+                first.Dispose();
+                if (UpdateChecker.AutoCheck(settings)) CheckForUpdates(false);
+            };
+            first.Start();
+            updateTimer.Interval = 60 * 60 * 1000;
+            updateTimer.Tick += (s, e) =>
+            {
+                if (UpdateChecker.IsDue(settings)) CheckForUpdates(false);
+                ShowPendingUpdateAlert();
+            };
+            updateTimer.Start();
+        }
+
+        private void ToggleAutoCheck()
+        {
+            UpdateChecker.SetAutoCheck(settings, !UpdateChecker.AutoCheck(settings));
+            if (UpdateChecker.IsDue(settings)) CheckForUpdates(false);
+            RebuildMenu();
+        }
+
+        private static void OpenPage(Uri page)
+        {
+            try { Process.Start(new ProcessStartInfo(page.AbsoluteUri) { UseShellExecute = true }); }
+            catch (Exception e) when (e is System.ComponentModel.Win32Exception || e is InvalidOperationException) { }
+        }
+
+        /// <summary>
+        /// manual 为 true 时是用户点了“检查更新…”：结果总会告诉用户，包括已是最新和失败。
+        /// 自动检查只在发现没提示过的新版本时提示一次，失败不打扰，下一轮再试。await 之后回到界面线程继续。
+        /// </summary>
+        private async void CheckForUpdates(bool manual)
+        {
+            if (checkingUpdate) return;
+            checkingUpdate = true;
+            var current = UpdateChecker.CurrentVersion;
+            try
+            {
+                var latest = await UpdateChecker.FetchLatest();
+                UpdateChecker.SetLastCheck(settings, DateTime.UtcNow);
+                var newer = UpdateChecker.IsNewer(latest.Version, current);
+                availableUpdate = newer ? latest : null;
+                RebuildMenu();
+                if (newer && (manual || settings.Get("notifiedUpdateVersion") != latest.Version))
+                    ShowUpdateAlert(latest, manual);
+                else if (manual)
+                    MessageBox.Show(L.T($"Version {current} is the latest.", $"当前版本 {current} 是最新的。", $"目前版本 {current} 是最新的。"),
+                        L.T("EZSnap Is Up to Date", "已是最新版本", "已是最新版本"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception e)
+            {
+                if (manual)
+                    // HttpRequestException 的消息只有一句“发送请求时出错”，具体原因在 InnerException 里。
+                    MessageBox.Show(e is System.Threading.Tasks.TaskCanceledException ? L.T("The request timed out.", "连接超时。", "連線逾時。")
+                        : e is System.Net.Http.HttpRequestException && e.InnerException != null ? e.InnerException.Message : e.Message,
+                        L.T("Couldn't Check for Updates", "检查更新失败", "檢查更新失敗"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                checkingUpdate = false;
+            }
+        }
+
+        private void ShowUpdateAlert(UpdateChecker.Release release, bool manual)
+        {
+            // 截图进行中、录快捷键时或提示已经开着时不弹，等截图结束或下一个整点再弹。
+            if (!manual && (session != null || recording || showingUpdateAlert))
+            {
+                pendingUpdateAlert = true;
+                return;
+            }
+            pendingUpdateAlert = false;
+            settings.Set("notifiedUpdateVersion", release.Version);
+            showingUpdateAlert = true;
+            var answer = MessageBox.Show(
+                L.T($"EZSnap {release.Version} is available (you have {UpdateChecker.CurrentVersion}). Open the GitHub release page to download it? It can also be found later in the tray menu.",
+                    $"EZSnap {release.Version} 已发布（当前版本 {UpdateChecker.CurrentVersion}）。要打开 GitHub 发布页下载吗？之后也能在托盘菜单里找到下载项。",
+                    $"EZSnap {release.Version} 已發佈（目前版本 {UpdateChecker.CurrentVersion}）。要打開 GitHub 發佈頁下載嗎？之後也能在通知區域選單裡找到下載項。"),
+                L.T("New Version Available", "有新版本", "有新版本"), MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            showingUpdateAlert = false;
+            if (answer == DialogResult.Yes) OpenPage(release.Page);
+        }
+
+        private void ShowPendingUpdateAlert()
+        {
+            if (pendingUpdateAlert && availableUpdate != null) ShowUpdateAlert(availableUpdate, false);
+        }
+
         // MARK: 截图
 
         private void CaptureFromMenu()
@@ -217,6 +338,8 @@ namespace EZSnap
         private void Handle(CaptureResult result, List<ScreenShot> shots, IntPtr previous)
         {
             session = null;
+            // 截图时推迟的新版本提示，等遮罩收起后再弹（D-22）。
+            if (pendingUpdateAlert) invoker.BeginInvoke((Action)ShowPendingUpdateAlert);
             foreach (var shot in shots) shot.Image.Dispose();
             switch (result.Kind)
             {
@@ -255,6 +378,7 @@ namespace EZSnap
         private void Quit()
         {
             CloseAllPins();
+            updateTimer.Dispose();
             hotKey.Dispose();
             tray.Visible = false;
             tray.Dispose();
