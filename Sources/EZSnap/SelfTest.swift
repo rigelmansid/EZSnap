@@ -69,6 +69,22 @@ enum SelfTest {
         for body in bad {
             check((try? UpdateChecker.parse(Data(body.utf8))) == nil, "无法识别的返回内容不当作新版本：\(body.prefix(30))")
         }
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let reset = Date(timeIntervalSince1970: 1_800_001_800)
+        func classify(_ status: Int, _ remaining: String?, _ resetHeader: String?, _ retry: String?) -> UpdateError {
+            UpdateChecker.error(status: status, remaining: remaining, reset: resetHeader, retryAfter: retry, now: now)
+        }
+        check(classify(403, "0", "1800001800", nil) == .rateLimited(reset), "403 且额度用完：算限流，带恢复时间")
+        check(classify(429, nil, nil, "60") == .rateLimited(now.addingTimeInterval(60)), "429 带 Retry-After：算限流，按要等的秒数")
+        check(classify(403, "0", nil, nil) == .rateLimited(nil), "额度用完但没给恢复时间：算限流")
+        check(classify(403, "12", "1800001800", nil) == .status(403), "403 但额度没用完：不算限流")
+        check(classify(500, "0", nil, nil) == .status(500), "500：不算限流")
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        let message = UpdateError.rateLimited(reset).errorDescription ?? ""
+        check(message == "GitHub 暂时限制了你所在网络的访问次数，请在 \(formatter.string(from: reset)) 以后再试。", "限流的提示：\(message)")
+        check(UpdateError.rateLimited(nil).errorDescription == "GitHub 暂时限制了你所在网络的访问次数，请稍后再试。", "不知道恢复时间时的提示")
         if failures > 0 {
             print("自检失败：检查更新有 \(failures) 项不对")
             exit(1)

@@ -274,6 +274,21 @@ namespace EZSnap
             foreach (var body in new[] { "{\"tag_name\":\"v0.2.0\",\"html_url\":\"https://example.com/x\"}", "{\"message\":\"Not Found\"}", "not json" })
                 Check("无法识别的返回内容不当作新版本：" + body, UpdateChecker.Parse(body) == null);
             Check("程序版本号取三段：" + UpdateChecker.CurrentVersion, UpdateChecker.CurrentVersion.Split('.').Length == 3);
+
+            var now = new DateTime(2027, 1, 15, 8, 0, 0, DateTimeKind.Utc);
+            string At(DateTime utc) => utc.ToLocalTime().ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            const string limited = "GitHub 暂时限制了你所在网络的访问次数，";
+            var resetUtc = now.AddMinutes(30);
+            var resetEpoch = new DateTimeOffset(resetUtc).ToUnixTimeSeconds().ToString();
+            foreach (var (name, message, expected) in new[]
+            {
+                ("403 且额度用完：算限流，带恢复时间", UpdateChecker.ErrorMessage(403, "0", resetEpoch, null, now), limited + $"请在 {At(resetUtc)} 以后再试。"),
+                ("429 带 Retry-After：算限流，按要等的秒数", UpdateChecker.ErrorMessage(429, null, null, "60", now), limited + $"请在 {At(now.AddSeconds(60))} 以后再试。"),
+                ("额度用完但没给恢复时间：算限流", UpdateChecker.ErrorMessage(403, "0", null, null, now), limited + "请稍后再试。"),
+                ("403 但额度没用完：不算限流", UpdateChecker.ErrorMessage(403, "12", resetEpoch, null, now), "GitHub 返回了 HTTP 403。"),
+                ("500：不算限流", UpdateChecker.ErrorMessage(500, "0", null, null, now), "GitHub 返回了 HTTP 500。"),
+            })
+                Check(name, message == expected, message);
         }
 
         /// <summary>真实访问一次 GitHub。CI 机器共用 IP，可能碰到匿名访问的限流，所以只记结果，不算失败。</summary>

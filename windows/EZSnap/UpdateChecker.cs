@@ -110,14 +110,39 @@ namespace EZSnap
             catch (InvalidCastException) { return null; }
         }
 
+        /// <summary>
+        /// 失败响应给用户看的说明。GitHub 限流时返回 403 或 429，并带 X-RateLimit-Remaining: 0（按小时计的额度用完，
+        /// X-RateLimit-Reset 是恢复时间的 Unix 秒数）或 Retry-After（要等的秒数）。同一个网络的人共用匿名额度。
+        /// 时间固定用 24 小时制的时:分，按本机时区显示。
+        /// </summary>
+        public static string ErrorMessage(int status, string remaining, string reset, string retryAfter, DateTime nowUtc)
+        {
+            if ((status != 403 && status != 429) || (remaining != "0" && retryAfter == null))
+                return L.T($"GitHub returned HTTP {status}.", $"GitHub 返回了 HTTP {status}。", $"GitHub 傳回了 HTTP {status}。");
+            DateTime? until = null;
+            if (double.TryParse(retryAfter, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
+                until = nowUtc.AddSeconds(seconds);
+            else if (long.TryParse(reset, NumberStyles.Integer, CultureInfo.InvariantCulture, out var epoch))
+                until = DateTimeOffset.FromUnixTimeSeconds(epoch).UtcDateTime;
+            if (until == null)
+                return L.T("GitHub is limiting requests from your network for now. Try again later.",
+                    "GitHub 暂时限制了你所在网络的访问次数，请稍后再试。", "GitHub 暫時限制了你所在網路的存取次數，請稍後再試。");
+            var time = until.Value.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+            return L.T($"GitHub is limiting requests from your network for now. Try again after {time}.",
+                $"GitHub 暂时限制了你所在网络的访问次数，请在 {time} 以后再试。", $"GitHub 暫時限制了你所在網路的存取次數，請在 {time} 之後再試。");
+        }
+
         /// <summary>查一次最新正式版。网络或返回内容有问题时抛出异常，消息可以直接给用户看。</summary>
         public static async Task<Release> FetchLatest()
         {
             using (var response = await Client.Value.GetAsync(LatestUrl).ConfigureAwait(false))
             {
                 if (response.StatusCode != HttpStatusCode.OK)
-                    throw new InvalidOperationException(L.T($"GitHub returned HTTP {(int)response.StatusCode}.",
-                        $"GitHub 返回了 HTTP {(int)response.StatusCode}。", $"GitHub 傳回了 HTTP {(int)response.StatusCode}。"));
+                {
+                    string Header(string name) => response.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
+                    throw new InvalidOperationException(ErrorMessage((int)response.StatusCode, Header("X-RateLimit-Remaining"),
+                        Header("X-RateLimit-Reset"), Header("Retry-After"), DateTime.UtcNow));
+                }
                 var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 return Parse(json) ?? throw new InvalidOperationException(L.T("GitHub returned a response EZSnap couldn't read.",
                     "GitHub 返回的内容无法识别。", "GitHub 傳回的內容無法辨識。"));

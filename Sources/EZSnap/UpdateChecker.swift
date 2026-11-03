@@ -72,15 +72,30 @@ enum UpdateChecker {
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("EZSnap/\(currentVersion)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else { throw UpdateError.status(status) }
+        let http = response as? HTTPURLResponse
+        let status = http?.statusCode ?? 0
+        guard status == 200 else {
+            throw error(status: status, remaining: http?.value(forHTTPHeaderField: "X-RateLimit-Remaining"),
+                        reset: http?.value(forHTTPHeaderField: "X-RateLimit-Reset"),
+                        retryAfter: http?.value(forHTTPHeaderField: "Retry-After"), now: Date())
+        }
         return try parse(data)
+    }
+
+    /// 把失败的响应归类。GitHub 限流时返回 403 或 429，并带 X-RateLimit-Remaining: 0（按小时计的额度用完，
+    /// X-RateLimit-Reset 是恢复时间的 Unix 秒数）或 Retry-After（要等的秒数）。同一个网络的人共用匿名额度。
+    static func error(status: Int, remaining: String?, reset: String?, retryAfter: String?, now: Date) -> UpdateError {
+        guard status == 403 || status == 429, remaining == "0" || retryAfter != nil else { return .status(status) }
+        if let seconds = retryAfter.flatMap(TimeInterval.init) { return .rateLimited(now.addingTimeInterval(seconds)) }
+        return .rateLimited(reset.flatMap(TimeInterval.init).map(Date.init(timeIntervalSince1970:)))
     }
 }
 
 enum UpdateError: LocalizedError, Equatable {
     case badResponse
     case status(Int)
+    /// GitHub 限流了；附带恢复的时间，不知道时为 nil。
+    case rateLimited(Date?)
 
     var errorDescription: String? {
         switch self {
@@ -88,6 +103,19 @@ enum UpdateError: LocalizedError, Equatable {
             return L("GitHub returned a response EZSnap couldn't read.", "GitHub 返回的内容无法识别。", "GitHub 傳回的內容無法辨識。")
         case .status(let code):
             return L("GitHub returned HTTP \(code).", "GitHub 返回了 HTTP \(code)。", "GitHub 傳回了 HTTP \(code)。")
+        case .rateLimited(let until?):
+            // 固定用 24 小时制的时:分，不随系统日历和区域格式变。
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "HH:mm"
+            let time = formatter.string(from: until)
+            return L("GitHub is limiting requests from your network for now. Try again after \(time).",
+                     "GitHub 暂时限制了你所在网络的访问次数，请在 \(time) 以后再试。",
+                     "GitHub 暫時限制了你所在網路的存取次數，請在 \(time) 之後再試。")
+        case .rateLimited(nil):
+            return L("GitHub is limiting requests from your network for now. Try again later.",
+                     "GitHub 暂时限制了你所在网络的访问次数，请稍后再试。",
+                     "GitHub 暫時限制了你所在網路的存取次數，請稍後再試。")
         }
     }
 }
