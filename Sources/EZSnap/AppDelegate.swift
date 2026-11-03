@@ -382,15 +382,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showPermissionAlert() {
         let alert = NSAlert()
         alert.messageText = L("Screen Recording Permission Needed", "需要屏幕录制权限", "需要螢幕錄製權限")
-        alert.informativeText = L("Turn on EZSnap in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen EZSnap.",
-                                  "请在“系统设置 → 隐私与安全性 → 屏幕与系统录音”中打开 EZSnap，然后退出并重新打开 EZSnap。",
-                                  "請在「系統設定 → 隱私權與安全性 → 螢幕與系統錄音」中開啟 EZSnap，然後結束並重新開啟 EZSnap。")
+        alert.informativeText = L("Turn on EZSnap in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen EZSnap.\n\nIf EZSnap is already in the list and turned on, that entry was left by an earlier version and doesn't work for this one. Click Reset Permission to clear it, then turn EZSnap on again when asked.",
+                                  "请在“系统设置 → 隐私与安全性 → 屏幕与系统录音”中打开 EZSnap，然后退出并重新打开 EZSnap。\n\n如果列表里已经有 EZSnap 而且是打开的，那是旧版本留下的记录，对这个版本无效：点“重置权限”清掉它，再按提示重新打开。",
+                                  "請在「系統設定 → 隱私權與安全性 → 螢幕與系統錄音」中開啟 EZSnap，然後結束並重新開啟 EZSnap。\n\n如果列表裡已經有 EZSnap 而且是開啟的，那是舊版本留下的記錄，對這個版本無效：點「重置權限」清除它，再依提示重新開啟。")
         alert.addButton(withTitle: L("Open System Settings", "打开系统设置", "打開系統設定"))
+        alert.addButton(withTitle: L("Reset Permission", "重置权限", "重置權限"))
         alert.addButton(withTitle: L("Cancel", "取消", "取消"))
         NSApp.activate()
-        if alert.runModal() == .alertFirstButtonReturn { openPermissionSettings() }
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: openPermissionSettings()
+        case .alertSecondButtonReturn: resetScreenCapturePermission()
+        default: break
+        }
         // 提示框开着时按下的快捷键会排到它关掉以后才处理，这些按键不能再弹一次。
         HotKey.ignoreBefore = GetCurrentEventTime()
+    }
+
+    /// 清掉系统里 EZSnap 的屏幕录制记录，再重新申请（坑 11）。旧版本留下的记录显示为打开，
+    /// 但签名对不上新版本，系统不认；清掉后重新申请，列表里会出现对应这个版本的新记录。
+    private func resetScreenCapturePermission() {
+        let id = Bundle.main.bundleIdentifier ?? "local.ezsnap.app"
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", "ScreenCapture", id]
+        let ok: Bool
+        do {
+            try process.run()
+            process.waitUntilExit()
+            ok = process.terminationStatus == 0
+        } catch {
+            ok = false
+        }
+        guard ok else {
+            showAlert(title: L("Couldn't Reset Permission", "重置权限失败", "重置權限失敗"),
+                      message: L("In System Settings → Privacy & Security → Screen & System Audio Recording, select EZSnap, click −, then reopen EZSnap.",
+                                 "请在“系统设置 → 隐私与安全性 → 屏幕与系统录音”中选中 EZSnap，点“−”删掉，再重新打开 EZSnap。",
+                                 "請在「系統設定 → 隱私權與安全性 → 螢幕與系統錄音」中選取 EZSnap，點「−」刪除，再重新開啟 EZSnap。"))
+            openPermissionSettings()
+            return
+        }
+        // 重新申请：系统会弹出授权提示，并在列表里加上新记录（默认关着）。打开后系统会要求退出并重新打开 EZSnap。
+        CGRequestScreenCaptureAccess()
     }
 
     private func showAlert(title: String, message: String) {

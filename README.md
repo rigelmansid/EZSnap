@@ -167,15 +167,25 @@ usual; `Enter` or `Esc` ends typing.
 ## FAQ
 
 <details>
-<summary><b>macOS asks for screen recording permission again after I rebuilt the app</b></summary>
+<summary><b>Screen recording is on for EZSnap, but it keeps asking for permission</b></summary>
 
-The app is ad-hoc signed, and that signature changes with every build, so macOS treats each build
-as a new app. Remove the old EZSnap from the permission list and add it again. To avoid this, create
-a self-signed code-signing certificate (**Keychain Access → Certificate Assistant → Create a
-Certificate**, type *Code Signing*) and build with it:
+The EZSnap entry in the permission list was left by an earlier version. Up to 0.2.0 the app was
+signed without a certificate, so macOS tied the permission to that exact build; the list still shows
+the old entry as on, but it doesn't count for the new version. Fix it once:
+
+1. Click **Reset Permission** in EZSnap's permission alert (versions after 0.2.0), or select EZSnap
+   in **System Settings → Privacy & Security → Screen & System Audio Recording** and click **−**.
+2. Open EZSnap, turn it on when asked, then quit and reopen EZSnap.
+
+Releases after 0.2.0 are all signed with the same certificate, so later updates keep the permission.
+
+If you build it yourself, create a self-signed certificate once; `build.sh` then signs with it and
+rebuilds keep the permission. Without it, every build is ad-hoc signed and needs permission again.
+Switching between your own builds and downloaded releases also needs it again, because the
+certificates differ.
 
 ```bash
-SIGN_IDENTITY="certificate name" ./scripts/install.sh
+./scripts/make-signing-cert.sh   # adds "EZSnap Code Signing" to your login keychain
 ```
 </details>
 
@@ -223,7 +233,7 @@ Screenshots go only to the clipboard, or to the file you choose.
 
 ```bash
 ./scripts/build.sh                                       # build/EZSnap.app only, no install
-./scripts/package-mac.sh                                 # dist/EZSnap-<version>.dmg, Apple Silicon + Intel
+./scripts/package-mac.sh                                 # dist/EZSnap-<version>.dmg, Apple Silicon + Intel (needs the signing certificate)
 build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp   # self-test, writes PNGs to /tmp
 build/EZSnap.app/Contents/MacOS/EZSnap --check-update     # ask GitHub for the latest release once
 swift scripts/make-icon.swift Resources/AppIcon.icns     # regenerate the Mac icon
@@ -258,7 +268,7 @@ self-test (including one real capture), and the Inno Setup installer as an artif
 | `Sources/EZSnap/L10n.swift` | Interface languages |
 | `Sources/EZSnap/UpdateChecker.swift` | Checking GitHub for a new version |
 | `Sources/EZSnap/SelfTest.swift` | Self-test |
-| `scripts/` | `build.sh`, `install.sh`, `package-mac.sh` (the DMG), the icon generator |
+| `scripts/` | `build.sh`, `install.sh`, `package-mac.sh` (the DMG), `make-signing-cert.sh`, the icon generator |
 | `windows/` | The Windows version (C#, WinForms) and its installer script |
 | `docs/` | Project notes, [decisions](docs/decisions.md) and [pitfalls](docs/pitfalls.md), in Chinese |
 

@@ -146,14 +146,22 @@ cd EZSnap
 ## 常见问题
 
 <details>
-<summary><b>重新编译后，macOS 又要我授权屏幕录制</b></summary>
+<summary><b>屏幕录制权限里 EZSnap 是打开的，但它一直要求授权</b></summary>
 
-app 用的是 ad-hoc 签名，每次编译签名都会变，系统把每次的构建当成新应用。在权限列表里删掉旧的 EZSnap
-再重新加。想避免这一点，在 **钥匙串访问 → 证书助理 → 创建证书** 建一个“代码签名”类型的自签名证书，
-然后用它构建：
+权限列表里的 EZSnap 是旧版本留下的记录。0.2.0 及以前的版本没有用证书签名，系统把权限绑在那一个构建上；
+列表里旧记录仍显示为打开，但对新版本无效。处理一次就好：
+
+1. 在 EZSnap 的权限提示框里点 **重置权限**（0.2.0 以后的版本），或者在 **系统设置 → 隐私与安全性 →
+   屏幕与系统录音** 里选中 EZSnap，点 **−** 删掉。
+2. 打开 EZSnap，按提示把它打开，然后退出并重新打开 EZSnap。
+
+0.2.0 以后的发布版都用同一张证书签名，之后升级不用再授权。
+
+自己编译的话，先生成一次自签名证书，`build.sh` 就会用它签名，重新编译后权限仍然有效。没有证书时每次编译
+都是 ad-hoc 签名，都要重新授权。自己编译的版本和下载的发布版证书不同，两者之间切换也要重新授权。
 
 ```bash
-SIGN_IDENTITY="证书名称" ./scripts/install.sh
+./scripts/make-signing-cert.sh   # 在登录钥匙串里加上“EZSnap Code Signing”
 ```
 </details>
 
@@ -196,7 +204,7 @@ SIGN_IDENTITY="证书名称" ./scripts/install.sh
 
 ```bash
 ./scripts/build.sh                                       # 只生成 build/EZSnap.app，不安装
-./scripts/package-mac.sh                                 # 生成 dist/EZSnap-版本号.dmg，Apple Silicon + Intel
+./scripts/package-mac.sh                                 # 生成 dist/EZSnap-版本号.dmg，Apple Silicon + Intel（需要签名证书）
 build/EZSnap.app/Contents/MacOS/EZSnap --selftest /tmp   # 自检，PNG 写到 /tmp
 build/EZSnap.app/Contents/MacOS/EZSnap --check-update     # 向 GitHub 查一次最新版本
 swift scripts/make-icon.swift Resources/AppIcon.icns     # 重新生成 Mac 图标
@@ -229,7 +237,7 @@ Windows 版用 `dotnet build windows/EZSnap/EZSnap.csproj -c Release` 构建，�
 | `Sources/EZSnap/L10n.swift` | 界面语言 |
 | `Sources/EZSnap/UpdateChecker.swift` | 检查 GitHub 上的新版本 |
 | `Sources/EZSnap/SelfTest.swift` | 自检 |
-| `scripts/` | `build.sh`、`install.sh`、`package-mac.sh`（打 DMG）、图标生成脚本 |
+| `scripts/` | `build.sh`、`install.sh`、`package-mac.sh`（打 DMG）、`make-signing-cert.sh`（签名证书）、图标生成脚本 |
 | `windows/` | Windows 版（C#、WinForms）和安装包脚本 |
 | `docs/` | 项目笔记、[决策](docs/decisions.md)和[踩过的坑](docs/pitfalls.md) |
 

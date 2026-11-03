@@ -30,6 +30,10 @@ privacy, verification) come from agent-system's RULE.md and aren't repeated here
 - The Mac DMG is built locally with `scripts/package-mac.sh`; the Windows installer comes from the
   CI run for the same commit. Upload both with their SHA-256 files to a GitHub release, published
   as the latest release (D-17). Note anything not tested on a real machine in the release notes.
+- Every Mac release is signed with the "EZSnap Code Signing" certificate from the login keychain, so
+  users keep the screen recording permission across updates (D-24). `package-mac.sh` refuses to run
+  without it. If the keychain lacks it, import the backed-up .p12; generate a new one only if the old
+  key is truly lost, and tell users in the release notes that they must grant permission again.
 
 ## Verification
 
