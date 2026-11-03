@@ -255,6 +255,7 @@ namespace EZSnap
             Drag(penTool, P(300, 320), P(320, 340));
             Check("画笔工具开着时在旧线条上拖：画新线条，旧的不动",
                 penTool.Annotations.Count == 2 && penTool.Annotations[0].SameAs(pen) && penTool.SelectedAnnotation == null, Describe(penTool.Annotations));
+            Check("建过几次输入框后，共用的默认字体仍然可用（坑 10）", Control.DefaultFont.Height > 0);
             // 样式是全局共用的，恢复默认，免得影响后面的检查。
             style.ColorIndex = 0;
             style.SizeIndex = 1;

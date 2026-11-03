@@ -83,6 +83,8 @@ namespace EZSnap
         private Handle dragHandle;
         private Tool? tool;
         private TextBox textBox;
+        /// <summary>输入框当前用的字体，由这里创建和释放（坑 10）。</summary>
+        private Font textFont;
         private OverlayForm textHost;
         private bool finished;
         private PointF? mouse;
@@ -725,8 +727,11 @@ namespace EZSnap
         {
             if (textBox == null) return;
             var scale = textHost?.DpiScale ?? 1;
-            textBox.Font?.Dispose();
-            textBox.Font = new Font(Theme.FontName, style.FontSize * scale, FontStyle.Regular, GraphicsUnit.Pixel);
+            // 只释放自己建的字体：新输入框的 Font 是全进程共用的 Control.DefaultFont，释放了以后再建控件都会报错（坑 10）。
+            var font = new Font(Theme.FontName, style.FontSize * scale, FontStyle.Regular, GraphicsUnit.Pixel);
+            textBox.Font = font;
+            textFont?.Dispose();
+            textFont = font;
             textBox.ForeColor = style.Color;
             FitTextBox();
         }
@@ -746,6 +751,8 @@ namespace EZSnap
             textBox.Parent?.Controls.Remove(textBox);
             textBox.Dispose();
             textBox = null;
+            textFont?.Dispose();
+            textFont = null;
             textHost = null;
             host?.Focus();
         }
