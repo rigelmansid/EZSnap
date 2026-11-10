@@ -12,7 +12,8 @@ namespace EZSnap
 {
     /// <summary>
     /// 自检：不截屏，用合成图片驱动截图会话，把界面和导出结果写成 PNG，并检查跨屏拼接、窗口选择、快捷键、
-    /// 调整已画的标注（D-20、D-21）、检查更新的版本比较（D-22）等逻辑。直接调用会话的方法，不经过真实的鼠标键盘事件。
+    /// 调整已画的标注（D-20、D-21）、检查更新的版本比较（D-22）、鼠标还按着时来的命令和复制失败（D-25）等逻辑。
+    /// 直接调用会话的方法，不经过真实的鼠标键盘事件。
     /// 结果写进 selftest.log；有失败时返回 1。不覆盖真实的全局快捷键和手感。
     /// </summary>
     internal static class SelfTest
@@ -30,7 +31,10 @@ namespace EZSnap
                 SingleScreen(dir);
                 EditShapes(dir);
                 EditTextAndPen(dir);
+                GestureInterruptions();
+                CopyFailure();
                 CrossScreen(dir);
+                MixedDpiText();
                 Shortcuts();
                 Languages();
                 UpdateLogic();
@@ -261,6 +265,151 @@ namespace EZSnap
             style.SizeIndex = 1;
         }
 
+        // MARK: 鼠标还按着时按 Ctrl+S、Ctrl+Z、Delete，或者没收到松开（D-25、坑 13），和 Mac 版自检同样的步骤
+
+        private static void GestureInterruptions()
+        {
+            var colors = AnnotationStyle.Colors;
+            var style = AnnotationStyle.Shared;
+            style.ColorIndex = 0;
+            style.SizeIndex = 1;
+            var region = new RectangleF(100, 80, 480, 280);
+            var rect = new Annotation { Tool = Tool.Rect, Color = colors[0], Width = 4, Points = { P(150, 150), P(300, 250) } };
+            var ellipse = new Annotation { Tool = Tool.Ellipse, Color = colors[3], Width = 4, Points = { P(350, 150), P(450, 250) } };
+            CaptureSession Session(Tool? tool, params Annotation[] list)
+            {
+                var session = new CaptureSession(new List<ScreenShot> { EditShot() }, new List<Rectangle>());
+                session.SimulateSelection(region, tool, list.Select(a => a.Clone()));
+                return session;
+            }
+            List<Annotation> Marks(params Annotation[] list) => list.ToList();
+            // 按下、拖一段，不松开。
+            void Press(CaptureSession session, PointF a, PointF b)
+            {
+                session.MouseDown(a, 1, session.Forms[0]);
+                session.MouseDragged(b);
+            }
+            // Ctrl+S 交出的导出图。保存对话框由 TrayApp 弹，这里不写文件、不碰剪贴板。
+            Bitmap Save(CaptureSession session)
+            {
+                Bitmap output = null;
+                session.Finished += r => { if (r.Kind == CaptureKind.Save) output = r.Image.Image; };
+                session.HandleKey(Keys.Control | Keys.S);
+                return output;
+            }
+
+            var s = Session(Tool.Rect);
+            Press(s, P(150, 150), P(300, 250));
+            using (var image = Save(s))
+            {
+                // 矩形左边线的中点：导出图从 (100, 80) 开始。
+                var edge = image?.GetPixel(50, 120);
+                Check("画矩形还没松开就保存：这一笔入库，导出的图里有它",
+                    s.Annotations.Count == 1 && edge?.R > 200 && edge?.G < 100 && edge?.B < 100, edge?.ToString() ?? "没有导出");
+            }
+
+            using (var plain = Session(null).RenderSelection().Image)
+            {
+                s = Session(Tool.Mosaic);
+                Press(s, P(300, 250), P(440, 250));
+                using (var image = Save(s))
+                {
+                    // 这一笔盖着“Mosaic 马赛克区域”几个字，打上马赛克后和原图不一样。
+                    var differing = 0;
+                    if (image != null)
+                        for (var x = 200; x < 340; x++)
+                            for (var y = 160; y < 180; y++)
+                                if (image.GetPixel(x, y).ToArgb() != plain.GetPixel(x, y).ToArgb()) differing++;
+                    Check("涂马赛克还没松开就保存：这一笔入库，导出的图打上了马赛克",
+                        s.Annotations.LastOrDefault()?.Tool == Tool.Mosaic && differing > 0, "不一样的像素：" + differing);
+                }
+            }
+
+            s = Session(Tool.Rect);
+            Press(s, P(150, 150), P(300, 250));
+            var undoable = s.CanUndo;
+            s.HandleKey(Keys.Control | Keys.Z);
+            s.MouseDragged(P(320, 260));
+            s.MouseUp(P(320, 260));
+            Check("画第一笔还没松开时撤销：可以撤销，这一笔取消，接着拖也不再画",
+                undoable && s.Annotations.Count == 0 && s.Current == null && !s.CanUndo, Describe(s.Annotations));
+
+            s = Session(null, rect);
+            Press(s, P(150, 200), P(170, 210));
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("拖矩形途中撤销：矩形回到拖动前，取消选中", Same(s.Annotations, Marks(rect)) && s.SelectedAnnotation == null, Describe(s.Annotations));
+            s.MouseDragged(P(190, 220));
+            s.MouseUp(P(190, 220));
+            Check("撤销后接着拖、松开：不再改标注", Same(s.Annotations, Marks(rect)), Describe(s.Annotations));
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("再撤销：撤销画矩形", s.Annotations.Count == 0, Describe(s.Annotations));
+
+            s = Session(null, rect, ellipse);
+            Press(s, P(150, 200), P(170, 210));
+            var moved = s.Annotations[0].Clone();
+            s.HandleKey(Keys.Delete);
+            s.MouseDragged(P(190, 220));
+            s.MouseUp(P(190, 220));
+            Check("拖矩形途中按 Delete：删掉矩形，之后的拖动不改椭圆", Same(s.Annotations, Marks(ellipse)) && s.SelectedAnnotation == null, Describe(s.Annotations));
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("撤销删除：矩形回到按 Delete 时的位置", Same(s.Annotations, Marks(moved, ellipse)), Describe(s.Annotations));
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("再撤销：撤销那次拖动", Same(s.Annotations, Marks(rect, ellipse)), Describe(s.Annotations));
+
+            s = Session(null, rect);
+            Press(s, P(150, 200), P(170, 210));
+            var dragged = Copy(s.Annotations);
+            s.MouseDown(P(520, 120), 1, s.Forms[0]);
+            s.MouseUp(P(520, 120));
+            Check("上一次拖动没收到松开就又按下：那次挪动保留", Same(s.Annotations, dragged), Describe(s.Annotations));
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("撤销：撤销那次挪动", Same(s.Annotations, Marks(rect)), Describe(s.Annotations));
+
+            s = Session(null, rect);
+            Press(s, P(150, 200), P(170, 210));
+            dragged = Copy(s.Annotations);
+            s.MouseCaptureLost();
+            s.MouseDragged(P(190, 220));
+            Check("拖动途中失去鼠标捕获：当作松开，之后的拖动不再改标注", Same(s.Annotations, dragged), Describe(s.Annotations));
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("撤销：撤销失去捕获前的挪动", Same(s.Annotations, Marks(rect)), Describe(s.Annotations));
+            style.ColorIndex = 0;
+            style.SizeIndex = 1;
+        }
+
+        // MARK: 复制失败不结束截图（D-25）：换掉写剪贴板那一步，不碰真实剪贴板，也不弹对话框
+
+        private static void CopyFailure()
+        {
+            var rect = new Annotation { Tool = Tool.Rect, Color = AnnotationStyle.Colors[0], Width = 4, Points = { P(150, 150), P(300, 250) } };
+            var region = new RectangleF(100, 80, 480, 280);
+            var s = new CaptureSession(new List<ScreenShot> { EditShot() }, new List<Rectangle>());
+            s.SimulateSelection(region, null, new[] { rect.Clone() });
+            CaptureResult result = null;
+            s.Finished += r => result = r;
+            var tries = 0;
+            s.WriteClipboard = (write, owner) => { tries++; return false; };
+            s.HandleKey(Keys.Return);
+            Check("复制失败：不结束截图，选区和标注都留着",
+                tries == 1 && result == null && s.CurrentPhase == CaptureSession.Phase.Selected && s.Selection == region
+                && Same(s.Annotations, new List<Annotation> { rect }), $"{tries} {result?.Kind} {s.CurrentPhase} {Describe(s.Annotations)}");
+            s.WriteClipboard = (write, owner) => true;
+            s.HandleKey(Keys.Return);
+            Check("再按一次 Enter、复制成功：结束截图", result?.Kind == CaptureKind.Copied && result.Image != null, result?.Kind.ToString() ?? "没有结束");
+            result?.Image?.Image.Dispose();
+
+            var c = new CaptureSession(new List<ScreenShot> { EditShot() }, new List<Rectangle>());
+            result = null;
+            c.Finished += r => result = r;
+            c.MouseMoved(P(200, 150));
+            c.WriteClipboard = (write, owner) => false;
+            c.HandleKey(Keys.C);
+            Check("取色复制失败：不退出截图", result == null && c.CurrentPhase == CaptureSession.Phase.Choosing, result?.Kind.ToString() ?? "");
+            c.WriteClipboard = (write, owner) => true;
+            c.HandleKey(Keys.C);
+            Check("再按一次 C、复制成功：退出截图", result?.Kind == CaptureKind.Cancelled, result?.Kind.ToString() ?? "没有退出");
+        }
+
         // MARK: 检查更新（D-22）
 
         private static void UpdateLogic()
@@ -355,6 +504,8 @@ namespace EZSnap
                 var mark = d.Annotations.LastOrDefault();
                 Check("点另一块屏：文字提交了，坐标是全局坐标", !d.IsEditingText && mark?.Text == "跨屏" && Math.Abs(mark.Points[0].X - 851) < 0.01,
                     mark == null ? "null" : mark.Points[0].ToString());
+                Check("在 B 上新写的文字按 B 的缩放：18 × 1.5 = 27 像素", mark != null && Math.Abs(mark.FontSize - 27) < 0.01 && Math.Abs(mark.Scale - 1.5f) < 0.01,
+                    mark == null ? "null" : mark.FontSize + " / " + mark.Scale);
             }
 
             // 马赛克横跨两屏：每块屏用自己的底图，导出不出错。
@@ -362,6 +513,53 @@ namespace EZSnap
             var mosaic = d.RenderSelection();
             Check("跨屏马赛克：左边是蓝，右边是红", mosaic.Image.GetPixel(30, 180).B > 200 && mosaic.Image.GetPixel(170, 180).R > 200,
                 mosaic.Image.GetPixel(30, 180) + " / " + mosaic.Image.GetPixel(170, 180));
+        }
+
+        // MARK: 在 100% 屏上写的文字挪到 150% 屏上再重新编辑，字号不变（D-25）
+
+        private static void MixedDpiText()
+        {
+            var a = new ScreenShot { Bounds = new Rectangle(0, 0, 800, 500), Image = Solid(800, 500, Color.Blue), Scale = 1 };
+            var b = new ScreenShot { Bounds = new Rectangle(800, 100, 600, 400), Image = Solid(600, 400, Color.Red), Scale = 1.5f };
+            var style = AnnotationStyle.Shared;
+            style.ColorIndex = 0;
+            style.SizeIndex = 1;
+            // 在 A 上写的 18 像素文字（Scale = 1），已经挪到了 B 上。
+            var text = new Annotation { Tool = Tool.Text, Color = AnnotationStyle.Colors[0], Width = 0, Points = { P(820, 150) }, Text = "100% 文字", FontSize = 18, Scale = 1 };
+            var s = new CaptureSession(new List<ScreenShot> { a, b }, new List<Rectangle>());
+            s.SimulateSelection(new RectangleF(700, 50, 400, 300), null, new[] { text.Clone() });
+            var all = s.Annotations;
+            TextBox Box() => s.Forms[1].Controls.OfType<TextBox>().FirstOrDefault();
+            void DoubleClickOnB()
+            {
+                s.MouseDown(P(830, 160), 1, s.Forms[1]);
+                s.MouseUp(P(830, 160));
+                s.MouseDown(P(830, 160), 2, s.Forms[1]);
+                s.MouseUp(P(830, 160));
+            }
+            void ClickOnA()
+            {
+                s.MouseDown(P(750, 300), 1, s.Forms[0]);
+                s.MouseUp(P(750, 300));
+            }
+
+            DoubleClickOnB();
+            Check("在 150% 的屏上重新编辑 100% 屏上写的文字：输入框还是 18 像素",
+                s.EditingText == 0 && Box() != null && Math.Abs(Box().Font.Size - 18) < 0.01, Box()?.Font.Size.ToString() ?? "没有输入框");
+            ClickOnA();
+            Check("不改内容就结束编辑：字号和缩放都不变", s.EditingText == null && Same(all, new List<Annotation> { text }),
+                all.Count == 0 ? "没有文字" : all[0].FontSize + " / " + all[0].Scale);
+            DoubleClickOnB();
+            style.SizeIndex = 2;
+            s.ApplyStyle();
+            ClickOnA();
+            Check("重新编辑时改字号：按这个文字自己的缩放算，26 像素", all.Count == 1 && Math.Abs(all[0].FontSize - 26) < 0.01 && all[0].Scale == 1,
+                all.Count == 0 ? "没有文字" : all[0].FontSize + " / " + all[0].Scale);
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("撤销改字号：回到 18 像素", all.Count == 1 && all[0].SameAs(text), Describe(all));
+            s.HandleKey(Keys.Control | Keys.Z);
+            Check("再撤销就没有文字了：不改内容的那次编辑没记撤销", all.Count == 0, Describe(all));
+            style.SizeIndex = 1;
         }
 
         // MARK: 快捷键、文件名

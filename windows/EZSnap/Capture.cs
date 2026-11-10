@@ -66,6 +66,31 @@ namespace EZSnap
         }
     }
 
+    internal static class ClipboardHelper
+    {
+        /// <summary>
+        /// 执行 write（往剪贴板写东西）。别的程序占着剪贴板时，WinForms 重试约 1 秒后抛 ExternalException：
+        /// 这时弹框说明并返回 false，由调用方决定接下来怎么办（截图不结束、钉图照旧留着，D-25）。
+        /// </summary>
+        public static bool TryWrite(Action write, IWin32Window owner)
+        {
+            try
+            {
+                write();
+                return true;
+            }
+            catch (ExternalException)
+            {
+                MessageBox.Show(owner,
+                    L.T("Couldn't copy to the clipboard. Another program may be using it; please try again.",
+                        "无法复制到剪贴板，可能有其他程序正在使用它，请再试一次。",
+                        "無法複製到剪貼簿，可能有其他程式正在使用它，請再試一次。"),
+                    L.T("Copy Failed", "复制失败", "複製失敗"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+        }
+    }
+
     internal static class Capturer
     {
         /// <summary>按物理像素截下每块屏幕。</summary>

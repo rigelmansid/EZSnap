@@ -115,6 +115,13 @@ namespace EZSnap
             if (e.Button == MouseButtons.Left && !IsDisposed) session.MouseUp(Global(e.Location));
         }
 
+        protected override void OnMouseCaptureChanged(EventArgs e)
+        {
+            base.OnMouseCaptureChanged(e);
+            // 拖动途中失去鼠标捕获就收不到松开了，交给会话当作在最后的位置松开（D-25）。
+            if (!IsDisposed) session.MouseCaptureLost();
+        }
+
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             if (session.IsEditingText) return base.ProcessCmdKey(ref msg, keyData);

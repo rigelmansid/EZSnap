@@ -163,6 +163,8 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
     }
 
     func mouseDown(at point: CGPoint, clickCount: Int, in view: OverlayView) {
+        // 上一次按下没收到松开时，先当作在那里松开了（D-25）。
+        endGesture()
         let p = clamp(point)
         if textField != nil {
             // 正在输入文字时，点一下只结束输入（点在另一块屏幕上也一样）。
@@ -240,7 +242,19 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
     }
 
     func mouseUp(at point: CGPoint) {
-        switch drag {
+        endGesture()
+        layoutToolbar()
+        updateCursor(at: clamp(point))
+        redraw()
+    }
+
+    /// 结束正在进行的鼠标手势，就当鼠标在最后的位置松开了：拖出的选区定下来，正在画的一笔入库，
+    /// 挪动、拉伸记进撤销。鼠标还按着时也可能来 ⌘Z、Delete、回车这些命令（坑 13），
+    /// 所以会改标注或要导出的命令都先调用它（D-25）；按下鼠标时也先调用，补上没收到的松开。
+    private func endGesture() {
+        let ended = drag
+        drag = .none
+        switch ended {
         case .creating(let start):
             if phase == .dragging {
                 if selection.width >= 4, selection.height >= 4 { select() } else { reset() }
@@ -266,10 +280,15 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
         case .moving, .none:
             break
         }
-        drag = .none
-        layoutToolbar()
-        updateCursor(at: clamp(point))
-        redraw()
+    }
+
+    /// 正在进行的手势已经改了标注：画出了有效的一笔，或者挪动、拉伸过。这时也能撤销，撤销的就是这次手势（D-25）。
+    private var gestureChangesAnnotations: Bool {
+        switch drag {
+        case .drawing: return current?.isMeaningful ?? false
+        case .editing(_, _, _, _, let before): return annotations != before
+        default: return false
+        }
     }
 
     func rightMouseDown() {
@@ -337,7 +356,7 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
             return phase == .selected
         case #selector(OverlayView.undo(_:)):
             if let editor = textField?.currentEditor() { return editor.undoManager?.canUndo ?? false }
-            return !history.isEmpty
+            return !history.isEmpty || gestureChangesAnnotations
         default:
             return true
         }
@@ -373,6 +392,7 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
     }
 
     private func toggleTool(_ t: Tool) {
+        endGesture()
         commitText()
         selectedAnnotation = nil
         redraw()
@@ -387,6 +407,10 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
     }
 
     private func undo() {
+        // 没有可撤销的就什么都不做，也不打断正在进行的拖动。
+        guard textField != nil || !history.isEmpty || gestureChangesAnnotations else { return }
+        // 拖动或画到一半时撤销：先把这次手势记下来再撤销，等于取消它（D-25）。
+        endGesture()
         if let field = textField {
             field.removeFromSuperview()
             textField = nil
@@ -406,6 +430,8 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
     }
 
     private func finish(_ action: Finish) {
+        // 鼠标还按着就完成：先把这一笔、这次拖动定下来，导出的图和屏幕上看到的一样（D-25）。
+        endGesture()
         commitText()
         guard let shot = renderSelection() else {
             close(.cancelled)
@@ -514,6 +540,9 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
     }
 
     private func deleteSelectedAnnotation() {
+        guard selectedAnnotation != nil else { return }
+        // 正在拖的就是它：先把这次拖动记进撤销，再删（D-25）。
+        endGesture()
         guard let i = selectedAnnotation else { return }
         history.append(annotations)
         annotations.remove(at: i)
@@ -525,6 +554,7 @@ final class CaptureSession: NSObject, NSTextFieldDelegate {
 
     /// 工具条上改了颜色或粗细：改正在输入的文字，或者改选中的标注。
     func styleChanged() {
+        endGesture()
         applyStyleToTextField()
         guard let i = selectedAnnotation else { return }
         var a = annotations[i]

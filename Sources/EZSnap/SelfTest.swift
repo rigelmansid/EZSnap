@@ -1,7 +1,7 @@
 import AppKit
 
 /// 渲染自检：用合成图片驱动截图会话和遮罩视图（不建窗口），把界面和导出结果写成 PNG 供人工查看。
-/// 另外检查调整已画标注的逻辑（D-20）：直接调用会话的鼠标、键盘方法。
+/// 另外检查调整已画标注的逻辑（D-20、D-21）和鼠标还按着时来的命令（D-25）：直接调用会话的鼠标、键盘方法。
 /// 不截屏、不需要屏幕录制权限，不经过真实的鼠标键盘事件，也不覆盖手感。
 enum SelfTest {
     static func run(outputDir: String) {
@@ -45,7 +45,107 @@ enum SelfTest {
         }
         checkEditing(shot: shot, image: image, windows: windows, outputDir: outputDir)
         checkTextAndPen(shot: shot, image: image, windows: windows, outputDir: outputDir)
+        checkGestureInterruptions(shot: shot, windows: windows)
         checkUpdateLogic()
+    }
+
+    /// 鼠标还按着时按保存、撤销、Delete，或者上一次松开没收到（D-25、坑 13）：导出的图和屏幕上看到的一致，
+    /// 之后的拖动不会再改到别的标注，撤销记录前后一致。
+    private static func checkGestureInterruptions(shot: ScreenShot, windows: [CGRect]) {
+        let colors = AnnotationStyle.colors
+        let style = AnnotationStyle.shared
+        style.colorIndex = 0
+        style.sizeIndex = 1
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
+        let region = CGRect(x: 100, y: 80, width: 480, height: 280)
+        let rect = Annotation(tool: .rect, color: colors[0], width: 4, points: [pt(150, 150), pt(300, 250)])
+        let ellipse = Annotation(tool: .ellipse, color: colors[3], width: 4, points: [pt(350, 150), pt(450, 250)])
+        var failures = 0
+        func check(_ ok: Bool, _ name: String) {
+            print(ok ? "通过：\(name)" : "失败：\(name)")
+            if !ok { failures += 1 }
+        }
+        func session(_ tool: Tool?, _ annotations: [Annotation] = []) -> CaptureSession {
+            let s = CaptureSession(shots: [shot], windowRects: windows, makesWindows: false)
+            s.simulateSelection(region, tool: tool, annotations: annotations)
+            return s
+        }
+        /// 按下、拖一段，不松开。
+        func press(_ s: CaptureSession, _ a: CGPoint, _ b: CGPoint) {
+            s.mouseDown(at: a, clickCount: 1, in: s.views[0])
+            s.mouseDragged(to: b)
+        }
+        /// ⌘S 交出的导出图。保存对话框由 AppDelegate 弹，这里不写文件、不碰剪贴板。
+        func save(_ s: CaptureSession) -> CapturedImage? {
+            var output: CapturedImage?
+            s.onFinish = { if case .save(let image) = $0 { output = image } }
+            s.saveSelection()
+            return output
+        }
+
+        var s = session(.rect)
+        press(s, pt(150, 150), pt(300, 250))
+        // 方框左边线的中点：导出图从 (100, 80) 开始，2 倍像素。
+        let edge = save(s).flatMap { NSBitmapImageRep(cgImage: $0.cgImage).colorAt(x: 100, y: 240)?.usingColorSpace(.sRGB) }
+        check(s.annotations.count == 1
+              && edge.map { $0.redComponent > 0.8 && $0.greenComponent < 0.4 && $0.blueComponent < 0.4 } == true,
+              "画方框还没松开就保存：这一笔入库，导出的图里有它")
+
+        let plain = session(nil).renderSelection()?.pngData
+        s = session(.mosaic)
+        press(s, pt(300, 250), pt(440, 250))
+        let mosaic = save(s)?.pngData
+        check(s.annotations.last?.tool == .mosaic && mosaic != nil && plain != nil && mosaic != plain,
+              "涂马赛克还没松开就保存：这一笔入库，导出的图打上了马赛克")
+
+        s = session(.rect)
+        press(s, pt(150, 150), pt(300, 250))
+        let undoable = s.validate(#selector(OverlayView.undo(_:)))
+        s.undoCommand()
+        s.mouseDragged(to: pt(320, 260))
+        s.mouseUp(at: pt(320, 260))
+        check(undoable && s.annotations.isEmpty && s.current == nil && !s.validate(#selector(OverlayView.undo(_:))),
+              "画第一笔还没松开时撤销：可以撤销，这一笔取消，接着拖也不再画")
+
+        s = session(nil, [rect])
+        press(s, pt(150, 200), pt(170, 210))
+        s.undoCommand()
+        check(s.annotations == [rect] && s.selectedAnnotation == nil, "拖方框途中撤销：方框回到拖动前，取消选中")
+        s.mouseDragged(to: pt(190, 220))
+        s.mouseUp(at: pt(190, 220))
+        check(s.annotations == [rect], "撤销后接着拖、松开：不再改标注")
+        s.undoCommand()
+        check(s.annotations.isEmpty, "再撤销：撤销画方框")
+
+        s = session(nil, [rect, ellipse])
+        press(s, pt(150, 200), pt(170, 210))
+        let moved = s.annotations[0]
+        if let key = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                      context: nil, characters: "\u{7F}", charactersIgnoringModifiers: "\u{7F}",
+                                      isARepeat: false, keyCode: 51) {
+            s.handleKey(key)
+        }
+        s.mouseDragged(to: pt(190, 220))
+        s.mouseUp(at: pt(190, 220))
+        check(s.annotations == [ellipse] && s.selectedAnnotation == nil, "拖方框途中按 Delete：删掉方框，之后的拖动不改圆形")
+        s.undoCommand()
+        check(s.annotations == [moved, ellipse], "撤销删除：方框回到按 Delete 时的位置")
+        s.undoCommand()
+        check(s.annotations == [rect, ellipse], "再撤销：撤销那次拖动")
+
+        s = session(nil, [rect])
+        press(s, pt(150, 200), pt(170, 210))
+        let dragged = s.annotations
+        s.mouseDown(at: pt(520, 120), clickCount: 1, in: s.views[0])
+        s.mouseUp(at: pt(520, 120))
+        check(s.annotations == dragged, "上一次拖动没收到松开就又按下：那次挪动保留")
+        s.undoCommand()
+        check(s.annotations == [rect], "撤销：撤销那次挪动")
+
+        if failures > 0 {
+            print("自检失败：手势进行中的命令有 \(failures) 项不对")
+            exit(1)
+        }
     }
 
     /// 版本号比较和 GitHub 返回内容的解析（D-22）。不联网。

@@ -64,10 +64,8 @@ namespace EZSnap
             base.WndProc(ref m);
         }
 
-        private void Copy()
-        {
-            try { captured.CopyToClipboard(); } catch (System.Runtime.InteropServices.ExternalException) { }
-        }
+        // 剪贴板被别的程序占着时提示一下，钉图照旧留着（D-25）。
+        private void Copy() => ClipboardHelper.TryWrite(captured.CopyToClipboard, this);
 
         protected override void OnPaint(PaintEventArgs e)
         {

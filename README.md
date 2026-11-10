@@ -22,8 +22,9 @@ A small screenshot and annotation tool for macOS (menu bar) and Windows 10/11
 > **Status: early.** [0.2.1](../../releases/latest) is the latest release, with installers for both
 > systems. The Mac version runs on macOS 26 (Apple Silicon); the Intel build has only been run under
 > Rosetta. The Windows version has passed its self-test, including a real screen capture, on GitHub's
-> Windows runners, but has not yet been tried on a real Windows 10 PC. Neither installer is signed,
-> so both systems warn on first launch.
+> Windows runners, but has not yet been tried on a real Windows 10 PC. Neither is signed with a
+> certificate the system trusts (the Mac app is self-signed and not notarized; the Windows installer
+> is unsigned), so both systems warn on first launch.
 
 ---
 
@@ -97,7 +98,8 @@ bar scissors → Quit) and open it again.
 To start it at login, add EZSnap under **System Settings → General → Login Items**.
 
 To upgrade, quit EZSnap and drag the new version onto **Applications**, replacing the old one.
-Because the app is ad-hoc signed, macOS may ask for screen recording permission again (see
+Releases after 0.2.0 are all signed with the same self-signed certificate, so macOS should keep the
+screen recording permission; coming from 0.2.0 or earlier, you need to grant it once more (see
 [FAQ](#faq)).
 
 ### Windows
@@ -177,7 +179,8 @@ the old entry as on, but it doesn't count for the new version. Fix it once:
    in **System Settings → Privacy & Security → Screen & System Audio Recording** and click **−**.
 2. Open EZSnap, turn it on when asked, then quit and reopen EZSnap.
 
-Releases after 0.2.0 are all signed with the same certificate, so later updates keep the permission.
+Releases after 0.2.0 are all signed with the same certificate, so later updates should keep the
+permission.
 
 If you build it yourself, create a self-signed certificate once; `build.sh` then signs with it and
 rebuilds keep the permission. Without it, every build is ad-hoc signed and needs permission again.
@@ -218,8 +221,9 @@ Screenshots go only to the clipboard, or to the file you choose.
 
 ## Known limitations
 
-- **Unsigned and not notarized.** Gatekeeper and SmartScreen warn on first launch; distributing to
-  others properly needs a Developer ID (Mac) and a code-signing certificate (Windows).
+- **No trusted signature.** The Mac app is self-signed, not signed with a Developer ID, and isn't
+  notarized; the Windows installer is unsigned. Gatekeeper and SmartScreen warn on first launch;
+  distributing to others properly needs a Developer ID (Mac) and a code-signing certificate (Windows).
 - **No long screenshots, OCR or screen recording.** These are out of scope.
 - **No start-at-login setting.** Add EZSnap to the system's login items yourself.
 - **A pin spanning two Mac screens shows on only one of them** when *Displays have separate Spaces*

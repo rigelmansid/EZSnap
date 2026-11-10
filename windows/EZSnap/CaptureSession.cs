@@ -40,6 +40,11 @@ namespace EZSnap
         }
 
         public event Action<CaptureResult> Finished;
+        /// <summary>
+        /// 写剪贴板（参数是写入动作和提示框的父窗口）：成功返回 true；别的程序占着剪贴板时提示用户并返回 false，截图不结束（D-25）。
+        /// 自检换成不碰真实剪贴板、不弹对话框的版本。
+        /// </summary>
+        public Func<Action, IWin32Window, bool> WriteClipboard = ClipboardHelper.TryWrite;
         public readonly List<OverlayForm> Forms;
         public readonly List<Annotation> Annotations = new List<Annotation>();
         public readonly Toolbar Toolbar = new Toolbar();
@@ -85,6 +90,8 @@ namespace EZSnap
         private TextBox textBox;
         /// <summary>输入框当前用的字体，由这里创建和释放（坑 10）。</summary>
         private Font textFont;
+        /// <summary>输入框字号按哪个缩放换算：新建时是输入框所在屏的，重新编辑时是这个文字自己的 Scale（D-25）。</summary>
+        private float textScale = 1;
         private OverlayForm textHost;
         private bool finished;
         private PointF? mouse;
@@ -209,6 +216,8 @@ namespace EZSnap
         public void MouseDown(PointF point, int clicks, OverlayForm form)
         {
             if (finished) return;
+            // 上一次按下没收到松开时，先当作在那里松开了（D-25）。
+            EndGesture();
             var p = Clamp(point);
             if (textBox != null)
             {
@@ -329,7 +338,35 @@ namespace EZSnap
         public void MouseUp(PointF point)
         {
             if (finished) return;
-            switch (drag)
+            EndGesture();
+            LayoutToolbar();
+            UpdateCursor(Clamp(point));
+            Redraw();
+        }
+
+        /// <summary>
+        /// 拖动途中失去了鼠标捕获（切到别的窗口、弹出系统对话框等），之后收不到松开：当作在最后的位置松开了（D-25）。
+        /// 正常松开时 WinForms 在 MouseUp 之后也会报一次，那时手势已经结束，什么都不做。
+        /// </summary>
+        public void MouseCaptureLost()
+        {
+            if (finished || drag == DragKind.None) return;
+            EndGesture();
+            LayoutToolbar();
+            if (mouse.HasValue) UpdateCursor(mouse.Value);
+            Redraw();
+        }
+
+        /// <summary>
+        /// 结束正在进行的鼠标手势，就当鼠标在最后的位置松开了：拖出的选区定下来，正在画的一笔入库，挪动、拉伸记进撤销。
+        /// 鼠标还按着时也可能来 Ctrl+Z、Delete、Enter 这些命令（坑 13），所以会改标注或要导出的命令都先调用它（D-25）；
+        /// 按下鼠标、失去鼠标捕获时也调用，补上没收到的松开。
+        /// </summary>
+        private void EndGesture()
+        {
+            var ended = drag;
+            drag = DragKind.None;
+            switch (ended)
             {
                 case DragKind.Creating:
                     if (CurrentPhase == Phase.Dragging)
@@ -363,12 +400,13 @@ namespace EZSnap
                         Selection = new RectangleF(Selection.X, Selection.Y, Math.Max(Selection.Width, 4), Math.Max(Selection.Height, 4));
                     break;
             }
-            drag = DragKind.None;
             UpdateUndoButton();
-            LayoutToolbar();
-            UpdateCursor(Clamp(point));
-            Redraw();
         }
+
+        /// <summary>正在进行的手势已经改了标注：画出了有效的一笔，或者挪动、拉伸过。这时也能撤销，撤销的就是这次手势（D-25）。</summary>
+        private bool GestureChangedAnnotations =>
+            drag == DragKind.Drawing ? Current != null && Current.IsMeaningful
+            : drag == DragKind.Editing && !SameList(Annotations, editBefore);
 
         public void RightMouseDown()
         {
@@ -427,8 +465,8 @@ namespace EZSnap
                 var f = Forms.FirstOrDefault(x => x.Mouse != null);
                 var color = f?.ColorUnderMouse();
                 if (color == null) return false;
-                try { Clipboard.SetText(ColorText(color.Value)); } catch (System.Runtime.InteropServices.ExternalException) { }
-                Close(CaptureKind.Cancelled);
+                // 复制失败时不退出截图，可以再按一次 C（D-25）。
+                if (WriteClipboard(() => Clipboard.SetText(ColorText(color.Value)), f)) Close(CaptureKind.Cancelled);
                 return true;
             }
             return false;
@@ -467,6 +505,7 @@ namespace EZSnap
 
         private void ToggleTool(Tool t)
         {
+            EndGesture();
             CommitText();
             SelectedAnnotation = null;
             tool = tool == t ? (Tool?)null : t;
@@ -475,13 +514,17 @@ namespace EZSnap
             Redraw();
         }
 
-        /// <summary>有改动记录或正在输入文字时可以撤销；撤销正在输入的文字框会把它整个去掉。</summary>
-        private void UpdateUndoButton() => Toolbar.CanUndo = textBox != null || history.Count > 0;
+        private void UpdateUndoButton() => Toolbar.CanUndo = CanUndo;
 
-        public bool CanUndo => textBox != null || history.Count > 0;
+        /// <summary>有改动记录、正在输入文字，或者正在进行的手势改了标注时可以撤销；撤销正在输入的文字框会把它整个去掉。</summary>
+        public bool CanUndo => textBox != null || history.Count > 0 || GestureChangedAnnotations;
 
         private void Undo()
         {
+            // 没有可撤销的就什么都不做，也不打断正在进行的拖动。
+            if (!CanUndo) return;
+            // 拖动或画到一半时撤销：先把这次手势记下来再撤销，等于取消它（D-25）。
+            EndGesture();
             if (textBox != null)
             {
                 RemoveTextBox();
@@ -506,6 +549,8 @@ namespace EZSnap
 
         private void DoFinish(Finish action)
         {
+            // 鼠标还按着就完成：先把这一笔、这次拖动定下来，导出的图和屏幕上看到的一样（D-25）。
+            EndGesture();
             CommitText();
             var shot = RenderSelection();
             if (shot == null)
@@ -516,7 +561,17 @@ namespace EZSnap
             switch (action)
             {
                 case Finish.Copy:
-                    try { shot.CopyToClipboard(); } catch (System.Runtime.InteropServices.ExternalException) { }
+                    if (!WriteClipboard(shot.CopyToClipboard, ToolbarHostFor(Selection)))
+                    {
+                        // 剪贴板被别的程序占着：不结束截图，选区和标注都留着，可以再试或改为保存（D-25）。
+                        shot.Image.Dispose();
+                        // 提示框开着时别的屏上的遮罩还能操作，截图可能已经在那边结束了。
+                        if (finished) return;
+                        LayoutToolbar();
+                        if (mouse.HasValue) UpdateCursor(mouse.Value);
+                        Redraw();
+                        return;
+                    }
                     Close(CaptureKind.Copied, shot);
                     break;
                 case Finish.Save:
@@ -640,8 +695,11 @@ namespace EZSnap
         private void DeleteSelectedAnnotation()
         {
             if (!SelectedAnnotation.HasValue) return;
+            // 正在拖的就是它：先把这次拖动记进撤销，再删（D-25）。
+            EndGesture();
+            if (SelectedAnnotation is not int i) return;
             history.Add(Snapshot());
-            Annotations.RemoveAt(SelectedAnnotation.Value);
+            Annotations.RemoveAt(i);
             SelectedAnnotation = null;
             UpdateUndoButton();
             LayoutToolbar();
@@ -652,6 +710,7 @@ namespace EZSnap
         /// <summary>工具条上改了颜色或粗细：改正在输入的文字，或者改选中的标注。</summary>
         public void ApplyStyle()
         {
+            EndGesture();
             ApplyStyleToTextBox();
             if (SelectedAnnotation is int i)
             {
@@ -676,15 +735,18 @@ namespace EZSnap
             EditingText = i;
             drag = DragKind.None;
             var a = Annotations[i];
-            BeginText(a.Points[0], form, a.Text);
+            BeginText(a.Points[0], form, a);
             LayoutToolbar();
             Redraw();
         }
 
         // MARK: 文字
 
-        /// <summary>text 为空时是新建：输入框竖直居中在点击处。否则是重新编辑：p 是原来文字的左上角，输入框放回原处。</summary>
-        private void BeginText(PointF p, OverlayForm form, string text = "")
+        /// <summary>
+        /// editing 为 null 时是新建：输入框竖直居中在点击处，字号按这块屏的缩放。否则是重新编辑：p 是原来文字的左上角，
+        /// 输入框放回原处，沿用这个文字原来的字号、颜色和缩放，挪到缩放不同的屏上也一样（D-25）。
+        /// </summary>
+        private void BeginText(PointF p, OverlayForm form, Annotation editing = null)
         {
             var box = new TextBox
             {
@@ -692,12 +754,13 @@ namespace EZSnap
                 // WinForms 的输入框不能透明；用深灰底，提交后文字直接画在截图上。
                 BackColor = Color.FromArgb(48, 48, 48),
                 Multiline = false,
-                Text = text,
+                Text = editing?.Text ?? "",
             };
             textBox = box;
             textHost = form;
-            ApplyStyleToTextBox();
-            box.Location = text.Length == 0
+            textScale = editing == null ? form.DpiScale : editing.Scale > 0 ? editing.Scale : 1;
+            SetTextBoxStyle(editing?.FontSize ?? style.FontSize * textScale, editing?.Color ?? style.Color);
+            box.Location = editing == null
                 ? new Point((int)p.X - form.GlobalBounds.X, (int)p.Y - form.GlobalBounds.Y - box.Height / 2)
                 // 和 CommitText 的换算相反：左边留 1 像素。
                 : new Point((int)Math.Round(p.X) - 1 - form.GlobalBounds.X, (int)Math.Round(p.Y) - form.GlobalBounds.Y);
@@ -723,16 +786,20 @@ namespace EZSnap
             box.Focus();
         }
 
+        /// <summary>工具条上改了样式：输入框换成新的颜色和字号，字号按 textScale 换算，和 ApplyStyle 改选中的文字一样。</summary>
         private void ApplyStyleToTextBox()
         {
-            if (textBox == null) return;
-            var scale = textHost?.DpiScale ?? 1;
+            if (textBox != null) SetTextBoxStyle(style.FontSize * textScale, style.Color);
+        }
+
+        private void SetTextBoxStyle(float fontSize, Color color)
+        {
             // 只释放自己建的字体：新输入框的 Font 是全进程共用的 Control.DefaultFont，释放了以后再建控件都会报错（坑 10）。
-            var font = new Font(Theme.FontName, style.FontSize * scale, FontStyle.Regular, GraphicsUnit.Pixel);
+            var font = new Font(Theme.FontName, fontSize, FontStyle.Regular, GraphicsUnit.Pixel);
             textBox.Font = font;
             textFont?.Dispose();
             textFont = font;
-            textBox.ForeColor = style.Color;
+            textBox.ForeColor = color;
             FitTextBox();
         }
 
@@ -762,6 +829,7 @@ namespace EZSnap
             if (textBox == null) return;
             var box = textBox;
             var host = textHost;
+            var scale = textScale;
             var text = box.Text;
             // 输入框在宿主屏的坐标里，换回全局坐标；左边留 1 像素对齐输入框里的文字。
             var origin = new PointF(box.Left + 1 + host.GlobalBounds.X, box.Top + host.GlobalBounds.Y);
@@ -775,12 +843,8 @@ namespace EZSnap
                 var a = Annotations[i].Clone();
                 a.Text = text;
                 a.Color = color;
-                // 字号没改时沿用原值（Font 回读的字号可能有浮点误差），改了才按当前屏幕记缩放。
-                if (Math.Abs(fontSize - a.FontSize) >= 0.01f)
-                {
-                    a.FontSize = fontSize;
-                    a.Scale = host.DpiScale;
-                }
+                // 字号没改时沿用原值（Font 回读的字号可能有浮点误差）。改了也是按这个文字自己的缩放算的，Scale 不变（D-25）。
+                if (Math.Abs(fontSize - a.FontSize) >= 0.01f) a.FontSize = fontSize;
                 if (text.Length == 0)
                 {
                     history.Add(Snapshot());
@@ -795,7 +859,7 @@ namespace EZSnap
             else if (text.Length > 0)
             {
                 history.Add(Snapshot());
-                Annotations.Add(new Annotation { Tool = Tool.Text, Color = color, Width = 0, Points = { origin }, Text = text, FontSize = fontSize, Scale = host.DpiScale });
+                Annotations.Add(new Annotation { Tool = Tool.Text, Color = color, Width = 0, Points = { origin }, Text = text, FontSize = fontSize, Scale = scale });
             }
             UpdateUndoButton();
             Redraw();

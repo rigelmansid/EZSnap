@@ -37,3 +37,4 @@ Updated: 2026-11-03 22:47
 - [ ] Windows 安装程序界面是英文的：要中文得自带 ChineseSimplified.isl（Inno Setup 官方没有）
 - [ ] Mac 的 DMG 只在本机试过：Intel 版只在 Rosetta 下跑过；从浏览器下载（带隔离标记）后 README 写的“仍要打开”步骤没实际走过（D-15）
 - [ ] Windows 版代码签名：没签名会被 SmartScreen 拦，和 Mac 的签名方式一起定
+- [ ] 真机验证 D-25：Mac 上按住标注拖动、画到一半时按 ⌘Z、Delete、回车、⌘S；Windows 上同样的操作，加上拖动中按 Alt+Tab、剪贴板被别的程序占着时复制（截图、取色、钉图）、在 100% 和 150% 两块屏之间挪过的文字双击编辑。Windows 的改动只在 Mac 上编译过，自检要推送后在 CI 上跑

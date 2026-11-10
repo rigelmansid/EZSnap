@@ -55,7 +55,10 @@ namespace EZSnap
         public List<PointF> Points = new List<PointF>();
         public string Text = "";
         public float FontSize = 18;
-        /// <summary>画下时所在屏幕的缩放，箭头头部的固定长度按它放大。</summary>
+        /// <summary>
+        /// 画下时所在屏幕的缩放：箭头头部的固定长度按它放大；之后改粗细、字号（包括重新编辑文字）也按它换算，
+        /// 挪到缩放不同的屏上也不变（D-25）。
+        /// </summary>
         public float Scale = 1;
 
         public void Extend(PointF p)
