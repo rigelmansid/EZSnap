@@ -212,4 +212,12 @@
 - 选项：手势进行中来了撤销、Delete、完成等命令时 A 先结束手势（当作在当前位置松开）再执行 / B 手势进行中不响应这些命令 / C 先取消手势再执行
 - 选择：A。撤销进行中的手势就是取消它：这一笔不要了、拖动回到原处，手势还没改过东西时撤销上一步；没有可撤销的、没有选中的标注时什么都不做，也不打断拖动。按下鼠标时、Windows 失去鼠标捕获时，也先结束上一次没收到松开的手势。Windows 复制失败（剪贴板被别的程序占着）时弹框提示，截图不结束，可以再试或改为保存；取色、钉图的复制失败也提示。重新编辑文字时输入框沿用文字原来的字号和颜色，改字号按这个文字自己的缩放算，和改选中标注的样式一致。
 - 理由：A 让导出和屏幕上看到的一致，完成时不会漏掉正在涂的马赛克；B 要用户松开再按一次；C 完成时会丢掉正在画的一笔，撤销会连上一步一起撤掉。
-- 影响：以后加会改标注或要导出的命令，要先调用 endGesture / EndGesture（坑 13）。两端自检加了手势中途按键的用例，Windows 自检另加复制失败和混合缩放下重新编辑文字。Mac 的复制没改：NSPasteboard 不会被别的程序占住。
+- 影响：以后加会改标注或要导出的命令，要先调用 endGesture / EndGesture（坑 13）。两端自检加了手势中途按键的用例，Windows 自检另加复制失败和混合缩放下重新编辑文字。Mac 的复制没改：NSPasteboard 不会被别的程序占住。CI 的改动见 D-26。
+
+### D-26 加 macOS 的 CI：编译 Apple Silicon 和 Intel 两种架构，跑自检（2026-11-10，用户决定）
+
+- 背景：2026-11-09 的代码审查指出只有 Windows 有 CI，Mac 版的 --selftest 只在本机手动跑（D-25 时待定）。agent 建议加 Mac 的 CI；Windows CI 不加 pull_request 触发，因为仓库没有别人提 PR。
+- 选项：A 加 macOS 的 CI / B 不加，照旧在本机跑；另外 Windows CI 加或不加 pull_request 触发
+- 选择：A，Windows 不加 pull_request（用户同意 agent 的建议）。做法由 agent 定：.github/workflows/macos.yml 在 GitHub 的 macOS 机器上运行 `UNIVERSAL=1 SIGN_IDENTITY=- ./scripts/build.sh`（两种架构，ad-hoc 签名），再运行 --selftest，日志和图片作为产物上传，自检失败时也上传；只在 Sources、Resources、Package.swift、build.sh 或这个文件改动时运行，也可以手动运行。
+- 理由：用户决定。仓库是公开的，GitHub Actions 不收费；推送后自动跑自检，Intel 那一份至少能确认编得过；和发布时 package-mac.sh 用的是同一个 build.sh。
+- 影响：CI 上没有“EZSnap Code Signing”证书，构建只用来检查，不能拿来发布；发布用的 DMG 仍在本机用 package-mac.sh 打（D-17、D-24）。自检只在 Apple Silicon 上运行，Intel 版仍没在真机上跑过。自检的输出改成行缓冲（坑 14）。

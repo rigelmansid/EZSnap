@@ -5,6 +5,8 @@ import AppKit
 /// 不截屏、不需要屏幕录制权限，不经过真实的鼠标键盘事件，也不覆盖手感。
 enum SelfTest {
     static func run(outputDir: String) {
+        // 输出接到管道或文件时（CI 里经过 tee）默认整块缓冲，崩溃时前面的结果全丢；改成一行一行写出去（坑 14）。
+        setvbuf(stdout, nil, _IOLBF, 0)
         // 固定用简体中文，输出的图不随系统语言变，能和以前的结果逐字节比较。
         L10n.forced = .zhHans
         let size = CGSize(width: 800, height: 500)

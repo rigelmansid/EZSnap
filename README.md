@@ -245,11 +245,14 @@ swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # regenerate the Window
 ```
 
 The self-test needs no screen recording permission. It drives a capture session with synthetic
-images and writes the overlay and the exported result as PNGs. It covers drawing and export, not
-screen capture, the shortcut or mouse and keyboard handling.
+images and writes the overlay and the exported result as PNGs. It covers drawing, export and the
+editing logic (by calling the session's mouse and keyboard methods directly), not screen capture,
+the shortcut or real mouse and keyboard events. Pushes that touch the Mac sources run
+[.github/workflows/macos.yml](.github/workflows/macos.yml) on a macOS runner: a build for Apple
+Silicon and Intel, then the self-test, with its log and PNGs as an artifact.
 
 The Windows version builds with `dotnet build windows/EZSnap/EZSnap.csproj -c Release`, on a Mac
-too, though it only runs on Windows. Each push runs
+too, though it only runs on Windows. Pushes that touch `windows/` run
 [.github/workflows/windows.yml](.github/workflows/windows.yml) on a Windows runner: build,
 self-test (including one real capture), and the Inno Setup installer as an artifact. Details are in
 [windows/README.md](windows/README.md). The version number is set in `Resources/Info.plist` (Mac),

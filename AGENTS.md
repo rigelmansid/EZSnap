@@ -37,8 +37,9 @@ privacy, verification) come from agent-system's RULE.md and aren't repeated here
 
 ## Verification
 
-- Mac: `build/EZSnap.app/Contents/MacOS/EZSnap --selftest <dir>` covers drawing, export and the logic for
-  editing drawn shapes (D-20). It calls the session's methods directly, so real mouse events and feel
-  still need a real Mac.
+- Mac: `build/EZSnap.app/Contents/MacOS/EZSnap --selftest <dir>` covers drawing, export, the logic for
+  editing drawn shapes (D-20) and commands that arrive mid-drag (D-25). It calls the session's methods
+  directly, so real mouse events and feel still need a real Mac. CI runs it after a universal,
+  ad-hoc signed build (`.github/workflows/macos.yml`, D-26); that build is only for checking.
 - Windows can only be run by CI (`.github/workflows/windows.yml`, which includes one real capture)
   and on a real PC; this Mac can build it but not run it.

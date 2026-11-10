@@ -212,11 +212,13 @@ swift scripts/make-icon.swift Resources/AppIcon.icns     # 重新生成 Mac 图�
 swift scripts/make-icon.swift windows/EZSnap/AppIcon.ico # 重新生成 Windows 图标
 ```
 
-自检不需要屏幕录制权限：用合成图片驱动一次截图，把遮罩界面和导出结果写成 PNG。只覆盖绘制和导出，
-不覆盖截屏、快捷键和鼠标键盘交互。
+自检不需要屏幕录制权限：用合成图片驱动一次截图，把遮罩界面和导出结果写成 PNG。覆盖绘制、导出和调整标注的逻辑
+（直接调用截图会话的鼠标、键盘方法），不覆盖截屏、快捷键和真实的鼠标键盘事件。改动 Mac 版源码的推送会在
+macOS 机器上跑 [.github/workflows/macos.yml](.github/workflows/macos.yml)：编译 Apple Silicon 和 Intel 两种架构，
+再跑自检，日志和 PNG 作为产物上传。
 
 Windows 版用 `dotnet build windows/EZSnap/EZSnap.csproj -c Release` 构建，在 Mac 上也能编译，
-但只能在 Windows 上运行。每次推送都会在 Windows 机器上跑
+但只能在 Windows 上运行。改动 `windows/` 的推送会在 Windows 机器上跑
 [.github/workflows/windows.yml](.github/workflows/windows.yml)：构建、自检（包括一次真实截屏）、
 用 Inno Setup 打安装包并上传。详见 [windows/README.md](windows/README.md)。版本号写在 `Resources/Info.plist`（Mac）、
 `windows/EZSnap/EZSnap.csproj` 和 `windows/installer/EZSnap.iss`（Windows）。

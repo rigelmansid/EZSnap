@@ -1,0 +1,41 @@
+# Mac 版：编译 Apple Silicon 和 Intel 两种架构、跑自检（D-26）。只在 Mac 版源码、资源、Package.swift、build.sh
+# 或本文件有改动时运行，也可以手动运行。CI 上没有发布用的证书，用 ad-hoc 签名，构建只用来检查；
+# 发布用的 DMG 仍在本机用 package-mac.sh 打（D-24）。
+name: macOS
+
+on:
+  push:
+    paths:
+      - 'Sources/**'
+      - 'Resources/**'
+      - 'Package.swift'
+      - 'scripts/build.sh'
+      - '.github/workflows/macos.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          swift --version
+          UNIVERSAL=1 SIGN_IDENTITY=- ./scripts/build.sh
+
+      # 写明 shell: bash 才带 pipefail：自检失败或崩溃时，经过 tee 这一步也算失败。
+      - name: Self-test
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/selftest"
+          mkdir -p "$out"
+          build/EZSnap.app/Contents/MacOS/EZSnap --selftest "$out" 2>&1 | tee "$out/selftest.log"
+
+      # 自检失败时也上传，方便看日志和图。
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: EZSnap-macos-selftest
+          path: ${{ runner.temp }}/selftest
